@@ -4,11 +4,15 @@ set -euo pipefail
 # Configurables (can be overridden via environment variables)
 WEB_PORT=${WEB_PORT:-8012}
 LLAMA_PORT=${LLAMA_PORT:-8009}
-LLAMA_MODEL=${LLAMA_MODEL:-models/Qwen3-VL-30B-A3B-Instruct-UD-Q4_K_XL.gguf}
-LLAMA_MMPROJ=${LLAMA_MMPROJ:-models/mmproj-F32.gguf}
 LLAMA_CTX=${LLAMA_CTX:-8192}
 LLAMA_BIN=${LLAMA_BIN:-./llama.cpp/build/bin/llama-server}
 SKIP_LLAMACPP=${SKIP_LLAMACPP:-0}
+
+DEFAULT_MODEL_QWEN="models/Qwen3-VL-30B-A3B-Instruct-UD-Q4_K_XL.gguf"
+DEFAULT_MMPROJ_QWEN="models/mmproj-F32.gguf"
+
+LLAMA_MODEL="${LLAMA_MODEL:-$DEFAULT_MODEL_QWEN}"
+LLAMA_MMPROJ="${LLAMA_MMPROJ:-$DEFAULT_MMPROJ_QWEN}"
 
 if ! command -v uv >/dev/null 2>&1; then
   echo "[ERROR] uv is required. Install via: pip install uv" >&2

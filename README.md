@@ -2,7 +2,13 @@
 
 <img width="640" height="521" alt="Image" src="https://github.com/user-attachments/assets/f24ef322-08b5-48e6-aa54-71b9e06d7401" />
 
-クリップボードから貼り付けたスクリーンショットを llama.cpp (Qwen3-VL-30B-A3B-Instruct + mmproj-F32) で OCR + 英→日翻訳し、Markdown で表示するシンプルな Web アプリです。
+![Image](https://github.com/user-attachments/assets/2939810b-8c72-4e91-9964-d6fac526c736)
+
+このリポジトリには2つの使い方があります。  
+1) Web UI: クリップボード貼り付け画像を OCR + 英→日翻訳して Markdown 表示  
+2) Windows 常駐クライアント: 画面上の範囲選択 → スクショ → OCR + 翻訳をオーバーレイ表示
+
+※ Windows 常駐クライアントは **Windows + WSL2 前提**です（Windows側から WSL2 上の FastAPI に接続します）。
 
 ## 要件
 - CUDA 対応 GPU (例: CUDA 13 / nvcc 13.0.88)
@@ -43,6 +49,7 @@
 - `SKIP_LLAMACPP=1` で既存の llama-server を使う場合、その既存プロセスが `-c` で起動された値が有効になります。
 
 ## フロントエンドの使い方
+- ブラウザで `http://localhost:8012` にアクセス。
 - 画像を **貼り付け** (Ctrl+V) するかドラッグ&ドロップ。
 - 任意で追加指示を入力し「再送信」。
 - 返ってきた Markdown を「コピー」ボタンで取得可能。
@@ -52,6 +59,36 @@
 - `llama.cpp` の `llama-server --api` を常駐させ、OpenAI 互換 `/v1/chat/completions` でマルチモーダル推論。
 - FastAPI (ポート 8012) が画像を PNG に正規化 → llama-server へ base64 画像付きメッセージ送信。
 - 応答 Markdown をそのまま表示 (要約禁止プロンプトを付与)。
+- Windows 常駐クライアントは `windows/OverlayClient` にあり、Ctrl+Alt押下/離しでROIを取得して `/api/v1/ocr_translate_with_grounding` に送信する。
+
+## Windows 常駐クライアント（WPF）
+- 参照先: `windows/OverlayClient`
+- 前提: Windows 10/11 + .NET 8 SDK（`dotnet --version` で確認）
+- 先に WSL 側の FastAPI を起動しておく（`./start.sh`、ポート 8012）。
+- ビルド:
+  ```powershell
+  cd windows/OverlayClient
+  dotnet build
+  ```
+- 実行:
+  ```powershell
+  dotnet run
+  ```
+- 配布用にまとめる:
+  ```powershell
+  dotnet publish -c Release -o output
+  ```
+  - `output/` に実行ファイル一式が出力されます（`settings.json` も同梱）。
+- `settings.json` は exe と同じフォルダに置かれ、ビルド出力に同梱されます。
+- WSL 側に繋がらない場合は `settings.json` の `server.base_url` を確認してください。
+- 既定は **Ctrl+Alt押下/離し**で矩形ROI指定 → 翻訳実行です（Ctrlのみ/Altのみは設定で変更可）。
+- 既定で ROI は **赤枠で一瞬表示**されます（`overlay.preview.show_roi_preview`）。
+- Ctrl押下中のリアルタイム枠表示は `overlay.preview.live_preview` で切替できます。
+- オーバーレイは「×」で閉じられます（アプリ自体の終了はトレイメニューの Quit）。
+
+## 新API（WSL側）
+- `GET /health`
+- `POST /api/v1/ocr_translate_with_grounding`（`clean_image` と `guide_image` を multipart で送信）
 
 ## 開発メモ
 - 依存は仮想環境内 (`uv sync`) のみでインストールされ、ホストには入れません。

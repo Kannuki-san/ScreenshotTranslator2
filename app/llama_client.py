@@ -17,8 +17,10 @@ class LlamaClient:
     async def translate_image(self, image_bytes: bytes, prompt: Optional[str] = None) -> str:
         settings = get_settings()
         prompt_text = prompt or (
-            "この画像全体を正確にOCRし、コードはそのまま出力し、"
-            "英語の文章は日本語に正確に翻訳してください。要約は禁止。"
+            "画像内の全文を省略せずにOCRし、"
+            "ファイル名や見出しも含めてすべて翻訳してください。"
+            "コードはそのまま出力し、要約は禁止です。"
+            "出力はプレーンテキストで、改行順序を維持してください。"
         )
         img_b64 = base64.b64encode(image_bytes).decode()
         image_url = f"data:image/png;base64,{img_b64}"
@@ -35,7 +37,7 @@ class LlamaClient:
                     ],
                 },
             ],
-            "max_tokens": 1600,
+            "max_tokens": 3000,
             "temperature": 0.1,
             "stop": None,
             "stream": False,
@@ -50,6 +52,55 @@ class LlamaClient:
 
         url = f"{self.api_base}/v1/chat/completions"
         resp = await self._client.post(url, json=payload)
+        resp.raise_for_status()
+        data = resp.json()
+        try:
+            return data["choices"][0]["message"]["content"]
+        except (KeyError, IndexError) as exc:  # pragma: no cover
+            raise RuntimeError(f"Unexpected response: {data}") from exc
+
+    async def ocr_translate_with_grounding(
+        self,
+        guide_png: bytes,
+        clean_png: bytes,
+        return_roi_fallback: bool,
+        timeout_sec: int,
+    ) -> str:
+        prompt_text = self._build_grounding_prompt(return_roi_fallback)
+        guide_b64 = base64.b64encode(guide_png).decode()
+        clean_b64 = base64.b64encode(clean_png).decode()
+
+        payload = {
+            "model": self.model,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "You are a careful OCR and translation engine. You must follow the output schema exactly.",
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt_text},
+                        {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{guide_b64}"}},
+                        {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{clean_b64}"}},
+                    ],
+                },
+            ],
+            "max_tokens": 1800,
+            "temperature": 0.1,
+            "stop": None,
+            "stream": False,
+            "n": 1,
+            "presence_penalty": 0,
+            "frequency_penalty": 0,
+            "logit_bias": {},
+            "top_p": 0.6,
+            "min_p": 0.05,
+            "repetition_penalty": 1.05,
+        }
+
+        url = f"{self.api_base}/v1/chat/completions"
+        resp = await self._client.post(url, json=payload, timeout=timeout_sec)
         resp.raise_for_status()
         data = resp.json()
         try:
@@ -84,6 +135,50 @@ class LlamaClient:
             return "起動中（状態確認待ち）"
 
         return "起動中（API応答あり・モデル読み込み未確認）"
+
+    @staticmethod
+    def _build_grounding_prompt(return_roi_fallback: bool) -> str:
+        base = (
+            "You will receive two images:\n"
+            "- Image A (guide_image): A screen crop with a thin gesture stroke indicating what the user points at.\n"
+            "- Image B (clean_image): The same crop without the stroke. Use this image for OCR and translation.\n\n"
+            "Core rules (must follow):\n"
+            "1) Extract ALL text in the target box with correct ordering and line breaks.\n"
+            "2) Preserve code blocks and inline code verbatim; do NOT translate code.\n"
+            "3) Do NOT summarize or omit any content. Translate every line faithfully.\n"
+            "4) If a character is unreadable, use [UNK].\n\n"
+            "Tasks:\n"
+            "1) Using Image A only, identify ALL text blocks inside the ROI that are relevant. "
+            "If multiple blocks exist, do NOT pick just one.\n"
+            "2) Return ONE bounding box that covers the union of all those text blocks in pixel coordinates WITHIN Image B (clean_image).\n"
+            "3) OCR the text inside the box from Image B EXACTLY as visible.\n"
+            "4) If the text is not Japanese, translate it into natural Japanese. If it is Japanese, return it as-is.\n"
+            "5) If the box is ambiguous or text is unreadable, still return best-effort bbox and mark uncertainty in notes.\n"
+            "Output STRICTLY as JSON (no markdown, no extra text).\n"
+        )
+
+        schema = (
+            '{\n'
+            '  "target_bbox": {"x1": <int>, "y1": <int>, "x2": <int>, "y2": <int>},\n'
+            '  "detected_language": "<string>",\n'
+            '  "ocr_text": "<string>",\n'
+            '  "ja_translation": "<string>",\n'
+            '  "confidence": <number between 0 and 1>,\n'
+            '  "notes": "<string>"\n'
+            '}'
+        )
+        if return_roi_fallback:
+            schema = schema[:-2] + ',\n  "roi_fallback": {"ocr_text": "<string>", "ja_translation": "<string>"}\n}'
+
+        if return_roi_fallback:
+            base += (
+                "\nIf roi_fallback is requested, it must contain the FULL OCR and translation of the entire ROI "
+                "(Image B). Do not shorten or omit any lines. If there are multiple text blocks or lines, include ALL "
+                "of them in reading order (top-to-bottom, left-to-right). Never return only a partial block. "
+                "Always include the roi_fallback field when requested."
+            )
+
+        return f"{base}\nOutput JSON schema:\n{schema}\n"
 
     async def aclose(self) -> None:
         await self._client.aclose()

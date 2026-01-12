@@ -13,12 +13,14 @@ class Settings:
         self.ctx_size = int(os.getenv("LLAMA_CTX", "8192"))
         self.model_name = os.getenv("LLAMA_MODEL_NAME", "qwen3-vl")
         self.system_prompt = (
-            "You are a precise OCR + translation assistant."
-            " 1) Extract *all* text from the image with exact spacing and line breaks."
-            " 2) Preserve code blocks and inline code verbatim; do not translate code."
-            " 3) For natural-language text, translate to Japanese with faithful meaning, no summary."
-            " 4) Keep ordering; do not drop bullet points or lines."
-            " 5) Output must be Markdown."
+            "You are a precise OCR + translation engine."
+            " Output the FULL text exactly as seen."
+            " Do NOT omit any part such as file names, headings, or section labels."
+            " Do NOT summarize. Translate every line."
+            " Preserve code blocks and inline code verbatim; do NOT translate code."
+            " Keep ordering and line breaks exactly."
+            " If a character is unreadable, use [UNK]."
+            " Output plain text (no markdown formatting)."
         )
 
 

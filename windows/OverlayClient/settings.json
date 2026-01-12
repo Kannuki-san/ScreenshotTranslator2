@@ -1,0 +1,79 @@
+{
+  "server": {
+    "base_url": "http://127.0.0.1:8012",
+    "health_path": "/health",
+    "inference_path": "/api/v1/ocr_translate_with_grounding",
+    "request_timeout_sec": 60,
+    "retry": {
+      "enabled": true,
+      "max_attempts": 1,
+      "backoff_ms": 300
+    }
+  },
+  "gesture": {
+    "enabled": true,
+    "mode": "ctrl_hold",
+    "modifier": "ctrl_alt"
+  },
+  "roi": {
+    "margin_ratio": 0.35,
+    "min_width": 300,
+    "min_height": 80,
+    "max_width": 1920,
+    "max_height": 1080,
+    "clip_to_screen": true,
+    "use_centroid_for_min_size_expand": true
+  },
+  "overlay": {
+    "topmost": true,
+    "header": {
+      "height_px": 28,
+      "show_status": true,
+      "buttons": {
+        "copy": true,
+        "close": true
+      }
+    },
+    "text": {
+      "wrap": true,
+      "vertical_scrollbar": "auto",
+      "selectable": true,
+      "font_size": 16
+    },
+    "interaction": {
+      "partial_clickthrough": true,
+      "interactive_whitelist": [
+        "Button",
+        "ScrollBar",
+        "ScrollViewer",
+        "TextBox",
+        "Thumb"
+      ],
+      "close_on_esc": true,
+      "replace_existing": true
+    },
+    "appearance": {
+      "background_opacity": 0.66,
+      "corner_radius": 6
+    },
+    "preview": {
+      "show_roi_preview": true,
+      "duration_ms": 700,
+      "live_preview": true
+    }
+  },
+  "fallback": {
+    "enabled": true,
+    "confidence_threshold": 0.5,
+    "bbox_min_width": 80,
+    "bbox_min_height": 40,
+    "bbox_max_area_ratio": 0.9,
+    "prefer_roi_fallback_from_server": true,
+    "force_use_roi": true
+  },
+  "logging": {
+    "level": "info",
+    "debug_save_images": false,
+    "debug_image_dir": ".debug_images"
+  }
+}
