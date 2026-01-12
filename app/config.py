@@ -20,6 +20,7 @@ class Settings:
             " Preserve code blocks and inline code verbatim; do NOT translate code."
             " Keep ordering and line breaks exactly."
             " If a character is unreadable, use [UNK]."
+            " Output only the translated/recognized content. Do NOT output instructions or meta commentary."
             " Output plain text (no markdown formatting)."
         )
 

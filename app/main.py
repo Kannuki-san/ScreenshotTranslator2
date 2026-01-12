@@ -21,6 +21,65 @@ app.add_middleware(
 
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
+_PROMPT_ECHO_MARKERS = (
+    "自然文は必ず日本語で全文訳してください",
+    "要約・省略禁止",
+    "コードや数式は原文のままとします",
+)
+
+
+def _looks_like_english_output(text: str) -> bool:
+    if not text:
+        return False
+    latin = sum(1 for c in text if "A" <= c <= "Z" or "a" <= c <= "z")
+    ja = sum(1 for c in text if "\u3040" <= c <= "\u30FF" or "\u4E00" <= c <= "\u9FFF")
+    if latin == 0:
+        return False
+    return ja == 0 or (latin >= 20 and latin > ja * 4)
+
+
+def _is_repetitive_output(text: str) -> bool:
+    if not text:
+        return False
+    cleaned = " ".join(text.split())
+    if len(cleaned) < 200:
+        return False
+    segments = cleaned.replace("。", "\n").split("\n")
+    counts: Dict[str, int] = {}
+    for seg in segments:
+        s = seg.strip()
+        if len(s) < 20:
+            continue
+        counts[s] = counts.get(s, 0) + 1
+        if counts[s] >= 3:
+            return True
+    return False
+
+
+def _should_retry_webui_output(text: str) -> bool:
+    if not text:
+        return True
+    lowered = text.strip()
+    if any(marker in lowered for marker in _PROMPT_ECHO_MARKERS):
+        return True
+    if _looks_like_english_output(lowered):
+        return True
+    return _is_repetitive_output(lowered)
+
+
+def _log_webui_output(markdown: str, prompt: str) -> None:
+    if os.getenv("LOG_WEBUI_RAW", "") != "1" and not _should_log_webui_output(markdown):
+        return
+    try:
+        with open("webui_raw.log", "a", encoding="utf-8") as f:
+            f.write("\n---\n")
+            f.write(f"prompt={prompt!r}\n")
+            f.write("output=\n")
+            f.write(markdown)
+            f.write("\n")
+    except Exception:
+        pass
+
 
 @app.get("/")
 async def root() -> FileResponse:
@@ -47,6 +106,22 @@ async def translate(
     client = LlamaClient()
     try:
         markdown = await client.translate_image(png_bytes, prompt or None)
+        if _should_retry_webui_output(markdown):
+            retry_prompt = (prompt or "").strip()
+            retry_suffix = (
+                "\n\n重要: 自然文は必ず日本語に翻訳してください。"
+                "コードや数式は原文のまま出力してください。"
+                "同じ文の繰り返しは禁止です。"
+                "途中で繰り返し始めたら停止せず、残りの内容を続けてください。"
+            )
+            retry_prompt = (retry_prompt + retry_suffix).strip() if retry_prompt else retry_suffix.strip()
+            markdown = await client.translate_image(
+                png_bytes,
+                retry_prompt,
+                max_tokens=1800,
+                temperature=0.7,
+                top_p=0.8,
+            )
     except Exception as exc:  # pragma: no cover
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     finally:

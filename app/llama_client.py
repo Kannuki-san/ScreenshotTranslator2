@@ -14,12 +14,22 @@ class LlamaClient:
         self.system_prompt = settings.system_prompt
         self._client = httpx.AsyncClient(timeout=300)
 
-    async def translate_image(self, image_bytes: bytes, prompt: Optional[str] = None) -> str:
+    async def translate_image(
+        self,
+        image_bytes: bytes,
+        prompt: Optional[str] = None,
+        max_tokens: Optional[int] = None,
+        temperature: Optional[float] = None,
+        top_p: Optional[float] = None,
+    ) -> str:
         settings = get_settings()
         prompt_text = prompt or (
             "画像内の全文を省略せずにOCRし、"
             "ファイル名や見出しも含めてすべて翻訳してください。"
-            "コードはそのまま出力し、要約は禁止です。"
+            "コードや数式は原文のまま出力し、"
+            "コードや数式以外の自然文は必ず日本語に翻訳してください。"
+            "指示文やメタ説明は出力しないでください。"
+            "要約は禁止です。"
             "出力はプレーンテキストで、改行順序を維持してください。"
         )
         img_b64 = base64.b64encode(image_bytes).decode()
@@ -37,17 +47,18 @@ class LlamaClient:
                     ],
                 },
             ],
-            "max_tokens": 3000,
-            "temperature": 0.1,
+            "max_tokens": max_tokens if max_tokens is not None else 3000,
+            "temperature": temperature if temperature is not None else 0.7,
             "stop": None,
             "stream": False,
             "n": 1,
-            "presence_penalty": 0,
+            "presence_penalty": 1.5,
             "frequency_penalty": 0,
             "logit_bias": {},
-            "top_p": 0.6,
+            "top_p": top_p if top_p is not None else 0.8,
             "min_p": 0.05,
-            "repetition_penalty": 1.05,
+            "repetition_penalty": 1.0,
+            "top_k": 20,
         }
 
         url = f"{self.api_base}/v1/chat/completions"
@@ -87,16 +98,17 @@ class LlamaClient:
                 },
             ],
             "max_tokens": 1800,
-            "temperature": 0.1,
+            "temperature": 0.7,
             "stop": None,
             "stream": False,
             "n": 1,
-            "presence_penalty": 0,
+            "presence_penalty": 1.5,
             "frequency_penalty": 0,
             "logit_bias": {},
-            "top_p": 0.6,
+            "top_p": 0.8,
             "min_p": 0.05,
-            "repetition_penalty": 1.05,
+            "repetition_penalty": 1.0,
+            "top_k": 20,
         }
 
         url = f"{self.api_base}/v1/chat/completions"
