@@ -51,8 +51,8 @@ public sealed class GestureSettings
 public sealed class RoiSettings
 {
     [JsonPropertyName("margin_ratio")] public double MarginRatio { get; set; } = 0.35;
-    [JsonPropertyName("min_width")] public int MinWidth { get; set; } = 360;
-    [JsonPropertyName("min_height")] public int MinHeight { get; set; } = 360;
+    [JsonPropertyName("min_width")] public int MinWidth { get; set; } = 64;
+    [JsonPropertyName("min_height")] public int MinHeight { get; set; } = 64;
     [JsonPropertyName("max_width")] public int MaxWidth { get; set; } = 1920;
     [JsonPropertyName("max_height")] public int MaxHeight { get; set; } = 1080;
     [JsonPropertyName("clip_to_screen")] public bool ClipToScreen { get; set; } = true;

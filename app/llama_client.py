@@ -24,13 +24,7 @@ class LlamaClient:
     ) -> str:
         settings = get_settings()
         prompt_text = prompt or (
-            "画像内の全文を省略せずにOCRし、"
-            "ファイル名や見出しも含めてすべて翻訳してください。"
-            "コードや数式は原文のまま出力し、"
-            "コードや数式以外の自然文は必ず日本語に翻訳してください。"
-            "指示文やメタ説明は出力しないでください。"
-            "要約は禁止です。"
-            "出力はプレーンテキストで、改行順序を維持してください。"
+            "すべての内容を日本語に正確に翻訳してください。なお、コードはそのまま出力してください。"
         )
         img_b64 = base64.b64encode(image_bytes).decode()
         image_url = f"data:image/png;base64,{img_b64}"
@@ -52,7 +46,7 @@ class LlamaClient:
             "stop": None,
             "stream": False,
             "n": 1,
-            "presence_penalty": 1.5,
+            "presence_penalty": 0.0,
             "frequency_penalty": 0,
             "logit_bias": {},
             "top_p": top_p if top_p is not None else 0.8,
@@ -97,12 +91,12 @@ class LlamaClient:
                     ],
                 },
             ],
-            "max_tokens": 1800,
+            "max_tokens": 4096,
             "temperature": 0.7,
             "stop": None,
             "stream": False,
             "n": 1,
-            "presence_penalty": 1.5,
+            "presence_penalty": 0.0,
             "frequency_penalty": 0,
             "logit_bias": {},
             "top_p": 0.8,
@@ -156,15 +150,16 @@ class LlamaClient:
             "- Image B (clean_image): The same crop without the stroke. Use this image for OCR and translation.\n\n"
             "Core rules (must follow):\n"
             "1) Extract ALL text in the target box with correct ordering and line breaks.\n"
-            "2) Preserve code blocks and inline code verbatim; do NOT translate code.\n"
-            "3) Do NOT summarize or omit any content. Translate every line faithfully.\n"
-            "4) If a character is unreadable, use [UNK].\n\n"
+            "2) Scan the entire image area from top-left to bottom-right. Do not miss any independent text blocks.\n"
+            "3) Include all text columns, headers, and footers. Do not focus only on the main body.\n"
+            "4) Preserve code blocks and inline code verbatim; do NOT translate code.\n"
+            "5) Do NOT summarize or omit any content. Translate every line faithfully.\n"
+            "6) If a character is unreadable, use [UNK].\n\n"
             "Tasks:\n"
-            "1) Using Image A only, identify ALL text blocks inside the ROI that are relevant. "
-            "If multiple blocks exist, do NOT pick just one.\n"
-            "2) Return ONE bounding box that covers the union of all those text blocks in pixel coordinates WITHIN Image B (clean_image).\n"
-            "3) OCR the text inside the box from Image B EXACTLY as visible.\n"
-            "4) If the text is not Japanese, translate it into natural Japanese. If it is Japanese, return it as-is.\n"
+            "1) The guide stroke (Image A) indicates that the USER SELECTED THE ENTIRE IMAGE AREA. Treat the whole image as the target.\n"
+            "2) Return ONE bounding box that covers ALL text in the image. Do not create a partial box.\n"
+            "3) OCR all text inside the image EXACTLY as visible.\n"
+            "4) すべての内容を日本語に正確に翻訳してください。なお、コードはそのまま出力してください。\n"
             "5) If the box is ambiguous or text is unreadable, still return best-effort bbox and mark uncertainty in notes.\n"
             "Output STRICTLY as JSON (no markdown, no extra text).\n"
         )
@@ -187,7 +182,8 @@ class LlamaClient:
                 "\nIf roi_fallback is requested, it must contain the FULL OCR and translation of the entire ROI "
                 "(Image B). Do not shorten or omit any lines. If there are multiple text blocks or lines, include ALL "
                 "of them in reading order (top-to-bottom, left-to-right). Never return only a partial block. "
-                "Always include the roi_fallback field when requested."
+                "Always include the roi_fallback field when requested. "
+                "すべてのの内容を日本語に正確に翻訳してください。なお、コードはそのまま出力してください。"
             )
 
         return f"{base}\nOutput JSON schema:\n{schema}\n"

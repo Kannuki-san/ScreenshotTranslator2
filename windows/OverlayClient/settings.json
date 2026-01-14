@@ -17,8 +17,8 @@
   },
   "roi": {
     "margin_ratio": 0.35,
-    "min_width": 300,
-    "min_height": 80,
+    "min_width": 64,
+    "min_height": 64,
     "max_width": 1920,
     "max_height": 1080,
     "clip_to_screen": true,

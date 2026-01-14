@@ -109,8 +109,8 @@ async def translate(
         if _should_retry_webui_output(markdown):
             retry_prompt = (prompt or "").strip()
             retry_suffix = (
-                "\n\n重要: 自然文は必ず日本語に翻訳してください。"
-                "コードや数式は原文のまま出力してください。"
+                "\n\n重要: すべての内容を日本語に正確に翻訳してください。"
+                "なお、コードはそのまま出力してください。"
                 "同じ文の繰り返しは禁止です。"
                 "途中で繰り返し始めたら停止せず、残りの内容を続けてください。"
             )
@@ -257,14 +257,40 @@ def _extract_field_from_raw(raw: str, key: str) -> str | None:
         pass
 
     # Fallback: regex search for a JSON-like "key": "value"
+    # We want to capture until the NEXT key or end of object, to handle unescaped quotes inside value.
+    # Heuristic: Look for ", "next_key": or " }
     import re
 
-    pattern = re.compile(rf'"{re.escape(key)}"\s*:\s*"(.*?)"', re.DOTALL)
-    m = pattern.search(raw)
-    if not m:
+    # 1. Find the start of the key-value pair
+    # Match: "key" : "
+    start_pattern = re.compile(rf'"{re.escape(key)}"\s*:\s*"', re.DOTALL)
+    m_start = start_pattern.search(raw)
+    if not m_start:
         return None
+    
+    start_idx = m_start.end()
+    rest = raw[start_idx:]
 
-    val = m.group(1)
+    # 2. Find the likely end of the value. 
+    # We look for a pattern that looks like the start of a NEW key: `",\s*"[\w]+"\s*:`
+    # OR the end of the JSON object: `"\s*}`
+    # Note: This regex finds the *delimiter* starting with the closing quote.
+    end_pattern = re.compile(r'"\s*(?:,\s*"[\w]+"\s*:|})', re.DOTALL)
+    
+    m_end = end_pattern.search(rest)
+    if m_end:
+        # The content is everything up to the quote that starts the delimiter
+        val = rest[:m_end.start()]
+    else:
+        # If no clear delimiter found:
+        # 1. Try naive greedy match for last quote (if it exists)
+        m_simple = re.search(r'(.*?)"', rest, re.DOTALL)
+        if m_simple:
+            val = m_simple.group(1)
+        else:
+            # 2. If NO quote found, assume truncation and return everything until the end
+            val = rest
+
     val = val.replace('\\"', '"').replace("\\n", "\n").replace("\\\\", "\\")
     return val
 

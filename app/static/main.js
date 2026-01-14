@@ -103,7 +103,7 @@ async function send() {
 function acceptFile(file) {
   currentFile = file;
   setPreview(file);
-  setStatus(`${file.name || 'pasted image'} (${Math.round(file.size/1024)} KB)`);
+  setStatus(`${file.name || 'pasted image'} (${Math.round(file.size / 1024)} KB)`);
   // 自動送信
   send();
 }
@@ -126,11 +126,11 @@ window.addEventListener('paste', e => {
 });
 
 // Drag-drop
-['dragenter','dragover'].forEach(ev => dropzone.addEventListener(ev, e => {
+['dragenter', 'dragover'].forEach(ev => dropzone.addEventListener(ev, e => {
   e.preventDefault();
   dropzone.classList.add('dragging');
 }));
-['dragleave','drop'].forEach(ev => dropzone.addEventListener(ev, e => {
+['dragleave', 'drop'].forEach(ev => dropzone.addEventListener(ev, e => {
   e.preventDefault();
   dropzone.classList.remove('dragging');
 }));
@@ -161,5 +161,5 @@ copyBtn.addEventListener('click', async () => {
 });
 
 // Defaults
-promptInput.value = '英語などの自然文は必ず日本語で全文訳してください。要約・省略禁止。コードや数式は原文のままとしますが、その後に自然文がある場合も必ず日本語に翻訳してください。';
-promptInput.title = '翻訳厳守: コード/数式は原文のまま。自然文は位置に関係なく必ず日本語訳。要約禁止';
+promptInput.value = 'すべての内容を日本語に正確に翻訳してください。なお、コードはそのまま出力してください。';
+promptInput.title = 'すべての内容を日本語に正確に翻訳してください。なお、コードはそのまま出力してください。';
