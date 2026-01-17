@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<schemalist gettext-domain="screenshot-translator">
+  <schema id="org.gnome.shell.extensions.screenshot-translator" path="/org/gnome/shell/extensions/screenshot-translator/">
+    <key name="backend-url" type="s">
+      <default>"http://127.0.0.1:8012/api/v1/ocr_translate_with_grounding"</default>
+      <summary>Backend URL</summary>
+      <description>URL of the implementation backend.</description>
+    </key>
+    <key name="start-capture" type="as">
+      <default>["&lt;Control&gt;&lt;Alt&gt;s"]</default>
+      <summary>Shortcut to start capture</summary>
+      <description>Keybinding to trigger selection area.</description>
+    </key>
+  </schema>
+</schemalist>

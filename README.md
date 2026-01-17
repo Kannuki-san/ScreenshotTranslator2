@@ -64,6 +64,7 @@
 ## Windows 常駐クライアント（WPF）
 - 参照先: `windows/OverlayClient`
 - 前提: Windows 10/11 + .NET 8 SDK（`dotnet --version` で確認）
+- WSL2でこのリポジトリをCloneした場合は、windowsフォルダをWindows側にコピーしてビルド・実行してください。
 - 先に WSL 側の FastAPI を起動しておく（`./start.sh`、ポート 8012）。
 - ビルド:
   ```powershell
@@ -86,6 +87,63 @@
 - Ctrl押下中のリアルタイム枠表示は `overlay.preview.live_preview` で切替できます。
 - オーバーレイは「×」で閉じられます（アプリ自体の終了はトレイメニューの Quit）。
 
+## Ubuntu Gnome Extension (Screenshot Translator)
+Ubuntu (Gnome Shell) 環境向けの専用拡張機能です。Windows 版とは操作感が異なります。
+
+### 前提
+- Python バックエンド (`./start.sh`) が `127.0.0.1:8012` で起動している必要があります。
+
+### インストール方法
+リポジトリ内の拡張機能をローカルの拡張機能ディレクトリにコピーしてインストールします。
+**注意**: Wayland 環境での更新不具合を防ぐため、シンボリックリンクではなく**コピー**を推奨しています。
+
+※ `gnome-extension/metadata.json` 内の UUID とディレクトリ名は一致させる必要があります。
+
+```bash
+# ディレクトリ作成 (例: screenshot-translator@<your-username>)
+# 注意: <your-username> の部分は metadata.json の uuid の @ 以降と一致させてください
+mkdir -p ~/.local/share/gnome-shell/extensions/screenshot-translator@<your-username>
+
+# ファイルのコピー (更新時もこのコマンドを実行してください)
+cp -r gnome-extension/* ~/.local/share/gnome-shell/extensions/screenshot-translator@<your-username>/
+```
+
+### 有効化
+インストール後、Gnome Shell を再読み込みする必要があります。
+- **Wayland (Ubuntu 標準)**: 一度ログアウトして、再度ログインしてください。
+- **X11**: `Alt` + `F2` を押し、`r` を入力して Enter。
+
+再読み込み後、「Extensions (拡張機能)」アプリまたは「Extension Manager」を開き、**Screenshot Translator** を有効にしてください。
+
+### 使い方
+Windows 版 (Ctrl+Alt+マウス移動) とは異なり、**範囲選択用のショートカット**を使用します。
+
+1. **キャプチャモード開始**:
+   - ショートカット: **`Ctrl` + `Alt` + `S`**
+   - 画面が少し暗くなり、選択モードに入ります。
+
+2. **範囲選択**:
+   - 翻訳したいテキスト範囲を **左ドラッグ** して選択します。
+   - マウスボタンを**離すと確定**され、翻訳が開始されます。
+
+3. **結果表示**:
+   - 数秒後に翻訳結果がオーバーレイ表示されます。
+   - **スクロール**: 長文の場合はマウスホイールでスクロールできます。
+   - **閉じる**: 右上の「X」ボタンを押すと閉じます。
+
+### アンインストール (取り除き方)
+拡張機能を削除するには、以下のディレクトリを削除し、Gnome Shell を再読み込みします。
+
+```bash
+rm -rf ~/.local/share/gnome-shell/extensions/screenshot-translator@<your-username>
+```
+その後、ログアウト/ログイン (または `Alt+F2 r`) してください。
+
+### トラブルシューティング
+- **更新が反映されない**: Wayland では `Alt+F2 r` が効かないことがあるため、ログアウト/ログインを試してください。
+- **Pango エラー**: 古いバージョンがキャッシュされている可能性があります。一度アンインストール操作を行ってから再インストールしてください。
+
+
 ## 新API（WSL側）
 - `GET /health`
 - `POST /api/v1/ocr_translate_with_grounding`（`clean_image` と `guide_image` を multipart で送信）
@@ -99,3 +157,5 @@
 - llama.cpp 初回起動時にモデルをロードするため、1 回目のリクエストは時間がかかります。モデルのロードが完了（ステータスに「準備完了 (ログより) / 起動中（API応答あり・モデル読み込み未確認）」と表示されます。）しても翻訳が実行されない場合は、お手数ですが、再度画像を張り付けてください。
 - モデル読み込み中に画像を貼り付けると失敗する場合があります。ステータスが「準備完了」と表示されてから貼り付けてください。
 - `LLAMA_CTX` を大きくすると VRAM 使用量が増えます。GPU メモリに合わせて起動時に調整してください。
+
+

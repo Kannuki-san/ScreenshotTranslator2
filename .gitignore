@@ -7,7 +7,7 @@ ocr_json_debug.log
 llama.cpp/
 models
 .DS_Store
-uv.lock
+
 public_release/
 *.user
 .idea/
