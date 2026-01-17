@@ -4,11 +4,14 @@
 
 ![Image](https://github.com/user-attachments/assets/2939810b-8c72-4e91-9964-d6fac526c736)
 
-このリポジトリには2つの使い方があります。  
-1) Web UI: クリップボード貼り付け画像を OCR + 英→日翻訳して Markdown 表示  
+このリポジトリには3つの使い方があります。
+1) Web UI: クリップボード貼り付け画像を OCR + 英→日翻訳して Markdown 表示
 2) Windows 常駐クライアント: 画面上の範囲選択 → スクショ → OCR + 翻訳をオーバーレイ表示
+3) Ubuntu Gnome Extension: 画面上の範囲選択 → スクショ → OCR + 翻訳をオーバーレイ表示
 
 ※ Windows 常駐クライアントは **Windows + WSL2 前提**です（Windows側から WSL2 上の FastAPI に接続します）。
+
+※ Ubuntu Gnome Extension は Ubuntu (Gnome Shell) 環境用です。
 
 ## 要件
 - CUDA 対応 GPU (例: CUDA 13 / nvcc 13.0.88)
