@@ -4,6 +4,9 @@ __pycache__/
 *.log
 .debug_images/
 ocr_json_debug.log
+debug_monitor_latest.png
+debug_*.py
+verify_*.py
 llama.cpp/
 models
 .DS_Store

@@ -7,7 +7,7 @@
 このリポジトリには3つの使い方があります。
 1) Web UI: クリップボード貼り付け画像を OCR + 英→日翻訳して Markdown 表示
 2) Windows 常駐クライアント: 画面上の範囲選択 → スクショ → OCR + 翻訳をオーバーレイ表示
-3) Ubuntu Gnome Extension: 画面上の範囲選択 → スクショ → OCR + 翻訳をオーバーレイ表示
+3) Ubuntu Gnome Extension: 画面上の範囲選択 → スクショ → OCR + 翻訳 (Monitor Modeで自動読み上げ対応)
 
 ※ Windows 常駐クライアントは **Windows + WSL2 前提**です（Windows側から WSL2 上の FastAPI に接続します）。
 
@@ -19,6 +19,9 @@
 - 下の２つのモデルファイルを[リンク先からダウンロード](https://huggingface.co/unsloth/Qwen3-VL-30B-A3B-Instruct-GGUF/tree/main)して、ローカル（./models/フォルダを作ってその中）に配置
   - [`models/Qwen3-VL-30B-A3B-Instruct-UD-Q4_K_XL.gguf`](https://huggingface.co/unsloth/Qwen3-VL-30B-A3B-Instruct-GGUF/blob/main/Qwen3-VL-30B-A3B-Instruct-UD-Q4_K_XL.gguf)
   - [`models/mmproj-F32.gguf`](https://huggingface.co/unsloth/Qwen3-VL-30B-A3B-Instruct-GGUF/blob/main/mmproj-F32.gguf)
+- **音声読み上げ (TTS)**:
+  - バックエンド起動時に `Kokoro-82M` (約300MB) が自動でダウンロードされます。
+  - 音声再生のために、ホスト側に `libportaudio2` や `aplay` (ALSA) が必要です（Ubuntu Desktopなら通常は入っています）。
 
 ## 使い方
 1. llama.cpp を CUDA ビルド
@@ -121,18 +124,27 @@ cp -r gnome-extension/* ~/.local/share/gnome-shell/extensions/screenshot-transla
 ### 使い方
 Windows 版 (Ctrl+Alt+マウス移動) とは異なり、**範囲選択用のショートカット**を使用します。
 
-1. **キャプチャモード開始**:
+1. **キャプチャモード開始 / Monitor Modeリセット**:
    - ショートカット: **`Ctrl` + `Alt` + `S`**
    - 画面が少し暗くなり、選択モードに入ります。
 
 2. **範囲選択**:
    - 翻訳したいテキスト範囲を **左ドラッグ** して選択します。
-   - マウスボタンを**離すと確定**され、翻訳が開始されます。
+   - マウスボタンを**離すと確定**され、モニタリングが開始されます。
 
-3. **結果表示**:
-   - 数秒後に翻訳結果がオーバーレイ表示されます。
-   - **スクロール**: 長文の場合はマウスホイールでスクロールできます。
-   - **閉じる**: 右上の「X」ボタンを押すと閉じます。
+3. **通常モード**:
+   - 選択後、数秒後に翻訳結果が画面にオーバーレイ表示されます。
+
+4. **Monitor Mode (自動読み上げ)**:
+   - バックエンドが起動している状態で範囲選択をすると、バックグラウンドで **10秒ごとに** 選択範囲を監視します。
+   - **新しいテキスト**（チャットの追記やスクロールなど）が検出されると、自動的に日本語で読み上げられます（**Kokoro-82M** 音声合成エンジン 'af_heart' を使用）。
+   - **特徴**:
+     - OCRの多少のブレや、「一部が欠けただけ」の状態は「変化なし」とみなして無視するため、同じ内容を何度も読み上げるのを防ぎます。
+     - タイムスタンプなどのメタデータ変動も無視します。
+     - 長い文章も句読点で区切って安定して読み上げます。
+
+5. **終了 / 範囲変更**:
+   - 別の範囲を選択したい場合や、モニタリングを止めたい場合は、再度 **`Ctrl` + `Alt` + `S`** を押して新しい範囲を選択してください（古いセッションはリセットされます）。
 
 ### アンインストール (取り除き方)
 拡張機能を削除するには、以下のディレクトリを削除し、Gnome Shell を再読み込みします。

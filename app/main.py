@@ -10,6 +10,14 @@ from typing import Any, Dict, Tuple
 
 from .llama_client import LlamaClient
 from .config import get_settings
+from .tts import tts_engine
+from .diff_engine import DiffEngine
+
+# Global session state
+class SessionState:
+    last_ocr_text: str = ""
+
+session_state = SessionState()
 
 app = FastAPI(title="Screenshot Translator", version="0.1.0")
 app.add_middleware(
@@ -371,3 +379,117 @@ async def ocr_translate_with_grounding(
             raise HTTPException(status_code=500, detail=f"Missing key: {key}")
 
     return JSONResponse(obj)
+
+
+@app.post("/api/v1/monitor_update")
+async def monitor_update(
+    clean_image: UploadFile = File(...),
+    guide_image: UploadFile = File(...), # Usually same as clean in this mode
+    reset_session: bool = Form(False),
+    options: str = Form(default="{}"),
+) -> JSONResponse:
+    if reset_session:
+        session_state.last_ocr_text = ""
+        # interrupt previous speech
+        tts_engine.speak("", interrupt=True) 
+
+    # 1. Perform OCR/Translation (using existing logic)
+    # Reuse ocr_translate_with_grounding logic or call it directly?
+    # Calling logic directly to avoid overhead of HTTP re-dispatch if possible, 
+    # but we need to handle the params.
+    # Let's just duplicate the crucial logic or refactor. 
+    # Refactoring is cleaner but calling the function handler is tricky in FastAPI without Request object.
+    # We will just instantiate client and call.
+    
+    try:
+        opt = json.loads(options) if options else {}
+    except Exception:
+        opt = {}
+
+    timeout_sec = int(opt.get("timeout_sec", 60))
+    clean_png, w, h = _read_upload_as_png(clean_image)
+    guide_png, _, _ = _read_upload_as_png(guide_image)
+
+    # DEBUG: Save image to check what we received
+    try:
+        with open("debug_monitor_latest.png", "wb") as f:
+            f.write(clean_png)
+    except Exception as e:
+        print(f"Failed to save debug image: {e}")
+
+    client = LlamaClient()
+    try:
+        # For monitor mode, we definitely want OCR. Translation is bonus but maybe not needed if user just wants TTS?
+        # User said: "バックエンドでOCR→翻訳... その結果をストックし... TTS"
+        # So we need Translation.
+        # "直前のデータだけ持っていて上書きして比較することでOK"
+        
+        raw = await client.ocr_translate_with_grounding(
+            guide_png=guide_png,
+            clean_png=clean_png,
+            return_roi_fallback=True, # Always get full text
+            timeout_sec=timeout_sec,
+        )
+    except Exception as exc:
+        return JSONResponse({"status": "error", "message": str(exc)}, status_code=500)
+    finally:
+        await client.aclose()
+
+    # 2. Extract Text
+    try:
+        obj = _extract_first_json(raw)
+        # Prioritize 'ja_translation' for TTS as requested (implied by "翻訳する機能... TTS")
+        # Ensure we use the full text. `ocr_translate_with_grounding` returns `ja_translation`.
+        # However, `ocr_translate_with_grounding`'s main ja_translation might be summarized?
+        # The prompt says: "すべての内容を日本語に正確に翻訳してください"
+        
+        # If roi_fallback is present, it might be safer? 
+        # But let's trust the main `ja_translation` first.
+        current_text = obj.get("ja_translation", "")
+        
+        # Fallback to OCR if translation is empty
+        if not current_text:
+            current_text = obj.get("ocr_text", "")
+            
+    except Exception:
+         # Fallback regex
+         current_text = _extract_field_from_raw(raw, "ja_translation") or ""
+         if not current_text:
+             current_text = _extract_field_from_raw(raw, "ocr_text") or ""
+
+    if not current_text:
+        print("[Monitor] No text detected in image.")
+        return JSONResponse({"status": "no_text_detected"})
+    
+    print(f"[Monitor] Detected Text len={len(current_text)}: {current_text[:50].replace('\n', ' ')}...")
+
+    # 3. Diff & TTS
+    new_content = DiffEngine.detect_new_content(session_state.last_ocr_text, current_text)
+    
+    if new_content:
+        # TTS only if there is new content
+        # User said: "複数パラグラフがある場合は一番下のパラグラフのみTTSできれば一番良い" (for FIRST time mostly?)
+        # "初回は...一番下のパラグラフのみ"
+        
+        text_to_speak = new_content
+        
+        if not session_state.last_ocr_text and reset_session:
+            # First run (reset_session=True)
+            # Try to grab last paragraph
+            paras = new_content.split('\n')
+            paras = [p.strip() for p in paras if p.strip()]
+            if paras:
+                text_to_speak = paras[-1]
+        
+        print(f"[Monitor] New content: {text_to_speak[:50]}...")
+        tts_engine.speak(text_to_speak, interrupt=True)
+        
+    # Update state
+    # Only update if we accepted the new content.
+    # If new_content is empty, it means we considered the current text as "Same" or "Subset/Jitter".
+    # In those cases, we should KEEP the old text (which is likely the "Good/Full" version) 
+    # to prevent "Good -> Bad(Subset) -> Good(Diff finds missing)" loop.
+    if new_content or reset_session or not session_state.last_ocr_text:
+         session_state.last_ocr_text = current_text
+
+    return JSONResponse({"status": "ok", "new_content_len": len(new_content)})

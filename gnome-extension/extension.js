@@ -90,10 +90,10 @@ export default class ScreenshotTranslatorExtension extends Extension {
         Main.layoutManager.addChrome(this._selectionArea);
 
         this._selectionArea.connect('area-selected', (obj, x, y, w, h) => {
-            this._takeScreenshot(x, y, w, h);
+            this._startMonitoring(x, y, w, h);
         });
 
-        console.log("ScreenshotTranslator: ENABLED (Version Manual Byte Construction Clean)");
+        console.log("ScreenshotTranslator: ENABLED (Monitor Mode)");
 
         Main.wm.addKeybinding(
             'start-capture',
@@ -106,9 +106,14 @@ export default class ScreenshotTranslatorExtension extends Extension {
         );
 
         this._httpSession = new Soup.Session();
+        this._monitorTimeoutId = null;
     }
 
     disable() {
+        if (this._monitorTimeoutId) {
+            GLib.source_remove(this._monitorTimeoutId);
+            this._monitorTimeoutId = null;
+        }
         if (this._selectionArea) {
             this._selectionArea.destroy();
             this._selectionArea = null;
@@ -128,7 +133,29 @@ export default class ScreenshotTranslatorExtension extends Extension {
         }
     }
 
-    async _takeScreenshot(x, y, w, h) {
+    _startMonitoring(x, y, w, h) {
+        if (this._monitorTimeoutId) {
+            GLib.source_remove(this._monitorTimeoutId);
+            this._monitorTimeoutId = null;
+        }
+
+        // Initial capture (reset session)
+        this._isProcessing = false;
+        this._takeScreenshot(x, y, w, h, true);
+
+        // Schedule periodic capture (every 10 seconds)
+        this._monitorTimeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 10000, () => {
+            if (this._isProcessing) {
+                console.log("Skipping capture: Previous check still pending.");
+                return GLib.SOURCE_CONTINUE;
+            }
+            this._takeScreenshot(x, y, w, h, false);
+            return GLib.SOURCE_CONTINUE;
+        });
+    }
+
+    async _takeScreenshot(x, y, w, h, isFirst = false) {
+        if (!isFirst) this._isProcessing = true;
         const cleanPath = GLib.build_filenamev([GLib.get_tmp_dir(), 'clean.png']);
 
         try {
@@ -144,33 +171,29 @@ export default class ScreenshotTranslatorExtension extends Extension {
                 }
 
                 if (success) {
-                    this._processAndSend(cleanPath, x, y, w, h);
+                    this._processAndSend(cleanPath, x, y, w, h, isFirst);
                 } else {
                     console.error('Screenshot failed (callback)');
-                    Main.notify('Screenshot failed');
                 }
             });
         } catch (e) {
             console.error('Screenshot failed:', e);
-            Main.notify('Screenshot failed', e.message);
         }
     }
 
-    async _processAndSend(cleanPath, x, y, w, h) {
+    async _processAndSend(cleanPath, x, y, w, h, isFirst) {
         try {
             const [success, cleanBytes] = GLib.file_get_contents(cleanPath);
             if (!success) {
                 console.error('Failed to read clean.png');
-                Main.notify('Error', 'Failed to read screenshot file');
                 return;
             }
 
-            const guideBytes = cleanBytes; /* guide same as clean for now */
-            this._uploadImages(cleanBytes, guideBytes, x, y, w, h);
+            const guideBytes = cleanBytes;
+            this._uploadImages(cleanBytes, guideBytes, x, y, w, h, isFirst);
 
         } catch (e) {
             console.error('Processing failed:', e);
-            Main.notify('Processing Error', e.message);
         }
     }
 
@@ -187,9 +210,9 @@ export default class ScreenshotTranslatorExtension extends Extension {
         return result;
     }
 
-    async _uploadImages(cleanBytes, guideBytes, x, y, w, h) {
-        console.log("ScreenshotTranslator: uploadImages called (Manual Byte Construction)");
-        const url = 'http://127.0.0.1:8012/api/v1/ocr_translate_with_grounding';
+    async _uploadImages(cleanBytes, guideBytes, x, y, w, h, isFirst) {
+        // Use monitor_update endpoint
+        const url = 'http://127.0.0.1:8012/api/v1/monitor_update';
 
         try {
             const boundary = "------------------------" + Date.now().toString(16);
@@ -211,7 +234,9 @@ export default class ScreenshotTranslatorExtension extends Extension {
 
             addPart('clean_image', 'clean.png', 'image/png', cleanBytes);
             addPart('guide_image', 'guide.png', 'image/png', guideBytes);
-            addPart('options', null, null, JSON.stringify({ return_roi_fallback: true }));
+            // Monitor specific options
+            addPart('reset_session', null, null, isFirst ? 'true' : 'false');
+            addPart('options', null, null, JSON.stringify({ timeout_sec: 60 }));
 
             parts.push(encoder.encode(`--${boundary}--\r\n`));
 
@@ -221,21 +246,21 @@ export default class ScreenshotTranslatorExtension extends Extension {
             const msg = Soup.Message.new('POST', url);
             msg.set_request_body_from_bytes(`multipart/form-data; boundary=${boundary}`, glibBytes);
 
+            // Send async
             const bytes = await this._httpSession.send_and_read_async(msg, GLib.PRIORITY_DEFAULT, null);
-
             const status = msg.get_status();
+
             if (status !== 200) {
-                throw new Error(`Server returned ${status} ${msg.get_reason_phrase()}`);
+                console.error(`Monitor server error sent: ${status} ${msg.get_reason_phrase()}`);
+            } else {
+                console.log("Monitor update success");
             }
-
-            const responseBody = new TextDecoder().decode(bytes.get_data());
-
-            const json = JSON.parse(responseBody);
-            this._showResult(json, x, y, w, h);
+            // No UI result for monitor mode
 
         } catch (e) {
             console.error('Translation request failed:', e);
-            Main.notify('Translation Error', e.message);
+        } finally {
+            this._isProcessing = false;
         }
     }
 
