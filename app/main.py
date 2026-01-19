@@ -393,6 +393,11 @@ async def monitor_update(
         # interrupt previous speech
         tts_engine.speak("", interrupt=True) 
 
+    # Check if TTS is currently busy playing audio (User Request: Don't interrupt, use latest after finish)
+    if not reset_session and tts_engine.is_busy():
+        print("[Monitor] TTS is busy. Skipping this update to accumulate changes.")
+        return JSONResponse({"status": "skipped_busy"})
+
     # 1. Perform OCR/Translation (using existing logic)
     # Reuse ocr_translate_with_grounding logic or call it directly?
     # Calling logic directly to avoid overhead of HTTP re-dispatch if possible, 

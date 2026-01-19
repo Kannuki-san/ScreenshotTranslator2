@@ -33,11 +33,12 @@ class KokoroTTS:
         logger.info("Initializing Kokoro TTS...")
         try:
             # lang_code='j' for Japanese as per user request
-            self.pipeline = KPipeline(lang_code='j')
+            self.pipeline = KPipeline(lang_code='j', repo_id='hexgrad/Kokoro-82M')
             self.sample_rate = 24000
             self._queue = queue.Queue()
             self._current_gen_id = 0
             self._stop_event = threading.Event()
+            self._is_generating = False  # Track busy state
             self._worker_thread = threading.Thread(target=self._worker_loop, daemon=True)
             self._worker_thread.start()
             logger.info("Kokoro TTS initialized.")
@@ -47,6 +48,10 @@ class KokoroTTS:
         
         self._initialized = True
 
+    def is_busy(self) -> bool:
+        """Check if TTS is currently generating or playing audio."""
+        return self._is_generating or not self._queue.empty()
+
     def _worker_loop(self):
         while True:
             try:
@@ -55,13 +60,16 @@ class KokoroTTS:
                 if item is None:
                     break
                 
+                self._is_generating = True
                 text, gen_id = item
                 if gen_id != self._current_gen_id:
                     self._queue.task_done()
+                    self._is_generating = False
                     continue
 
                 if not self.pipeline:
                      self._queue.task_done()
+                     self._is_generating = False
                      continue
 
                 logger.info(f"Starting TTS for gen_id={gen_id}: {text[:30]}...")
@@ -134,9 +142,11 @@ class KokoroTTS:
                             pass
                 
                 self._queue.task_done()
+                self._is_generating = False
                 
             except Exception as e:
                 logger.error(f"TTS worker error: {e}")
+                self._is_generating = False
 
     def speak(self, text: str, interrupt: bool = True):
         if not text or not self.pipeline:
