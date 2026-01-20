@@ -21,6 +21,8 @@ fi
 
 # Install Python deps inside .venv via uv (no global installs)
 uv sync
+# Initialize TTS models and dictionary
+uv run app/scripts/setup_tts.py
 
 if [ "$SKIP_LLAMACPP" != "1" ]; then
   if [ ! -x "$LLAMA_BIN" ]; then
