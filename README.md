@@ -88,7 +88,7 @@
   - `output/` に実行ファイル一式が出力されます（`settings.json` も同梱）。
 - `settings.json` は exe と同じフォルダに置かれ、ビルド出力に同梱されます。
 - WSL 側に繋がらない場合は `settings.json` の `server.base_url` を確認してください。
-- 既定は **Ctrl+Alt押下/離し**で矩形ROI指定 → 翻訳実行です（Ctrlのみ/Altのみは設定で変更可）。
+- 既定は **Ctrl+Altを押しながらドラッグし、キーを離すと**矩形ROI指定 → 翻訳実行です（Ctrlのみ/Altのみは設定で変更可）。
 - 既定で ROI は **赤枠で一瞬表示**されます（`overlay.preview.show_roi_preview`）。
 - Ctrl押下中のリアルタイム枠表示は `overlay.preview.live_preview` で切替できます。
 - オーバーレイは「×」で閉じられます（アプリ自体の終了はトレイメニューの Quit）。
@@ -158,7 +158,7 @@ rm -rf ~/.local/share/gnome-shell/extensions/screenshot-translator@<your-usernam
 
 ## 新API（WSL側）
 - `GET /health`
-- `POST /api/v1/ocr_translate_with_grounding`（`clean_image` と `guide_image` を multipart で送信）
+- `POST /api/v1/ocr_translate_with_grounding`（`clean_image` (必須) と `guide_image` (任意) を multipart で送信）
 
 ## 開発メモ
 - 依存は仮想環境内 (`uv sync`) のみでインストールされ、ホストには入れません。

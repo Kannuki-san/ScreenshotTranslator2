@@ -71,9 +71,26 @@ class LlamaClient:
         return_roi_fallback: bool,
         timeout_sec: int,
     ) -> str:
-        prompt_text = self._build_grounding_prompt(return_roi_fallback)
-        guide_b64 = base64.b64encode(guide_png).decode()
+        # Check if guide and clean are identical (Monitor Mode / optimized client)
+        is_single_image = (guide_png == clean_png)
+
+        prompt_text = self._build_grounding_prompt(return_roi_fallback, is_single_image)
         clean_b64 = base64.b64encode(clean_png).decode()
+
+        content_list = [{"type": "text", "text": prompt_text}]
+
+        if is_single_image:
+            content_list.append(
+                {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{clean_b64}"}}
+            )
+        else:
+            guide_b64 = base64.b64encode(guide_png).decode()
+            content_list.append(
+                {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{guide_b64}"}}
+            )
+            content_list.append(
+                {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{clean_b64}"}}
+            )
 
         payload = {
             "model": self.model,
@@ -84,11 +101,7 @@ class LlamaClient:
                 },
                 {
                     "role": "user",
-                    "content": [
-                        {"type": "text", "text": prompt_text},
-                        {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{guide_b64}"}},
-                        {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{clean_b64}"}},
-                    ],
+                    "content": content_list,
                 },
             ],
             "max_tokens": 4096,
@@ -114,55 +127,49 @@ class LlamaClient:
         except (KeyError, IndexError) as exc:  # pragma: no cover
             raise RuntimeError(f"Unexpected response: {data}") from exc
 
-    async def get_status(self) -> str:
-        """ステータス推定: /slots 優先、なければ /v1/models でAPI疎通のみ確認。"""
-        url_slots = f"{self.api_base}/slots"
-        try:
-            resp = await self._client.get(url_slots)
-            resp.raise_for_status()
-            data = resp.json()
-            states = {slot.get("state", "?") for slot in data.get("slots", [])} if isinstance(data, dict) else set()
-            if states:
-                if "loading" in states:
-                    return "モデル読み込み中"
-                if "active" in states:
-                    return "実行中"
-                if states == {"idle"}:
-                    return "準備完了"
-                return f"状態: {', '.join(sorted(states))}"
-        except Exception:
-            pass
-
-        try:
-            r_models = await self._client.get(f"{self.api_base}/v1/models")
-            if r_models.status_code == 200:
-                return "起動中（API応答あり・モデル読み込み未確認）"
-        except Exception:
-            return "起動中（状態確認待ち）"
-
-        return "起動中（API応答あり・モデル読み込み未確認）"
+    # ... get_status ...
 
     @staticmethod
-    def _build_grounding_prompt(return_roi_fallback: bool) -> str:
-        base = (
-            "You will receive two images:\n"
-            "- Image A (guide_image): A screen crop with a thin gesture stroke indicating what the user points at.\n"
-            "- Image B (clean_image): The same crop without the stroke. Use this image for OCR and translation.\n\n"
-            "Core rules (must follow):\n"
-            "1) Extract ALL text in the target box with correct ordering and line breaks.\n"
-            "2) Scan the entire image area from top-left to bottom-right. Do not miss any independent text blocks.\n"
-            "3) Include all text columns, headers, and footers. Do not focus only on the main body.\n"
-            "4) Preserve code blocks and inline code verbatim; do NOT translate code.\n"
-            "5) Do NOT summarize or omit any content. Translate every line faithfully.\n"
-            "6) If a character is unreadable, use [UNK].\n\n"
-            "Tasks:\n"
-            "1) The guide stroke (Image A) indicates that the USER SELECTED THE ENTIRE IMAGE AREA. Treat the whole image as the target.\n"
-            "2) Return ONE bounding box that covers ALL text in the image. Do not create a partial box.\n"
-            "3) OCR all text inside the image EXACTLY as visible.\n"
-            "4) すべての内容を日本語に正確に翻訳してください。なお、コードはそのまま出力してください。\n"
-            "5) If the box is ambiguous or text is unreadable, still return best-effort bbox and mark uncertainty in notes.\n"
-            "Output STRICTLY as JSON (no markdown, no extra text).\n"
-        )
+    def _build_grounding_prompt(return_roi_fallback: bool, is_single_image: bool = False) -> str:
+        if is_single_image:
+            base = (
+                "You will receive an image.\n"
+                "This image represents a screen area selected by the user for OCR and translation.\n\n"
+                "Core rules (must follow):\n"
+                "1) Extract ALL text in the image with correct ordering and line breaks.\n"
+                "2) Scan the entire image area from top-left to bottom-right. Do not miss any independent text blocks.\n"
+                "3) Include all text columns, headers, and footers. Do not focus only on the main body.\n"
+                "4) Preserve code blocks and inline code verbatim; do NOT translate code.\n"
+                "5) Do NOT summarize or omit any content. Translate every line faithfully.\n"
+                "6) If a character is unreadable, use [UNK].\n\n"
+                "Tasks:\n"
+                "1) Treat the WHOLE image as the target.\n"
+                "2) Return ONE bounding box that covers ALL text in the image. Do not create a partial box.\n"
+                "3) OCR all text inside the image EXACTLY as visible.\n"
+                "4) すべての内容を日本語に正確に翻訳してください。なお、コードはそのまま出力してください。\n"
+                "5) If the image is ambiguous or text is unreadable, still return best-effort bbox and mark uncertainty in notes.\n"
+                "Output STRICTLY as JSON (no markdown, no extra text).\n"
+            )
+        else:
+            base = (
+                "You will receive two images:\n"
+                "- Image A (guide_image): A screen crop with a thin gesture stroke indicating what the user points at.\n"
+                "- Image B (clean_image): The same crop without the stroke. Use this image for OCR and translation.\n\n"
+                "Core rules (must follow):\n"
+                "1) Extract ALL text in the target box with correct ordering and line breaks.\n"
+                "2) Scan the entire image area from top-left to bottom-right. Do not miss any independent text blocks.\n"
+                "3) Include all text columns, headers, and footers. Do not focus only on the main body.\n"
+                "4) Preserve code blocks and inline code verbatim; do NOT translate code.\n"
+                "5) Do NOT summarize or omit any content. Translate every line faithfully.\n"
+                "6) If a character is unreadable, use [UNK].\n\n"
+                "Tasks:\n"
+                "1) The guide stroke (Image A) indicates that the USER SELECTED THE ENTIRE IMAGE AREA. Treat the whole image as the target.\n"
+                "2) Return ONE bounding box that covers ALL text in the image. Do not create a partial box.\n"
+                "3) OCR all text inside the image EXACTLY as visible.\n"
+                "4) すべての内容を日本語に正確に翻訳してください。なお、コードはそのまま出力してください。\n"
+                "5) If the box is ambiguous or text is unreadable, still return best-effort bbox and mark uncertainty in notes.\n"
+                "Output STRICTLY as JSON (no markdown, no extra text).\n"
+            )
 
         schema = (
             '{\n'
@@ -176,16 +183,31 @@ class LlamaClient:
         )
         if return_roi_fallback:
             schema = schema[:-2] + ',\n  "roi_fallback": {"ocr_text": "<string>", "ja_translation": "<string>"}\n}'
-
+        
+        # Schema is same for both
+        
         if return_roi_fallback:
-            base += (
-                "\nIf roi_fallback is requested, it must contain the FULL OCR and translation of the entire ROI "
-                "(Image B). Do not shorten or omit any lines. If there are multiple text blocks or lines, include ALL "
-                "of them in reading order (top-to-bottom, left-to-right). Never return only a partial block. "
-                "Always include the roi_fallback field when requested. "
-                "すべてのの内容を日本語に正確に翻訳してください。なお、コードはそのまま出力してください。"
-            )
-
+             # Roi fallback text also needs slight adjustment or is it generic?
+             # "If roi_fallback is requested, it must contain the FULL OCR... of the entire ROI (Image B)"
+             # In single image mode, there is only "The Image".
+             # But "Image B" reference is problematic.
+             if is_single_image:
+                 base += (
+                    "\nIf roi_fallback is requested, it must contain the FULL OCR and translation of the entire image. "
+                    "Do not shorten or omit any lines. If there are multiple text blocks or lines, include ALL "
+                    "of them in reading order. Never return only a partial block. "
+                    "Always include the roi_fallback field when requested. "
+                    "すべてのの内容を日本語に正確に翻訳してください。なお、コードはそのまま出力してください。"
+                 )
+             else:
+                 base += (
+                    "\nIf roi_fallback is requested, it must contain the FULL OCR and translation of the entire ROI "
+                    "(Image B). Do not shorten or omit any lines. If there are multiple text blocks or lines, include ALL "
+                    "of them in reading order (top-to-bottom, left-to-right). Never return only a partial block. "
+                    "Always include the roi_fallback field when requested. "
+                    "すべてのの内容を日本語に正確に翻訳してください。なお、コードはそのまま出力してください。"
+                 )
+        
         return f"{base}\nOutput JSON schema:\n{schema}\n"
 
     async def aclose(self) -> None:

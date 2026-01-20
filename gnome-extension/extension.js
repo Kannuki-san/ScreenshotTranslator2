@@ -304,7 +304,7 @@ export default class ScreenshotTranslatorExtension extends Extension {
             };
 
             addPart('clean_image', 'clean.png', 'image/png', cleanBytes);
-            addPart('guide_image', 'guide.png', 'image/png', cleanBytes);
+
             addPart('reset_session', null, null, isFirst ? 'true' : 'false');
             addPart('options', null, null, JSON.stringify({ timeout_sec: 60 }));
 

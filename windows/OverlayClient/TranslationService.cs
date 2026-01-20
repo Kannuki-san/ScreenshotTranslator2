@@ -48,7 +48,6 @@ public sealed class TranslationService
         Application.Current.Dispatcher.Invoke(() => _overlayManager.ShowDebugRoi(roi));
 
         byte[] cleanPng = ScreenCapture.CaptureRectToPngBytes(roi);
-        byte[] guidePng = ScreenCapture.DrawGuideRect(cleanPng);
 
         if (_settings.Logging.DebugSaveImages)
         {
@@ -57,7 +56,6 @@ public sealed class TranslationService
                 Directory.CreateDirectory(_settings.Logging.DebugImageDir);
                 var stamp = DateTime.Now.ToString("yyyyMMdd_HHmmss_fff");
                 File.WriteAllBytes(Path.Combine(_settings.Logging.DebugImageDir, $"clean_{stamp}.png"), cleanPng);
-                File.WriteAllBytes(Path.Combine(_settings.Logging.DebugImageDir, $"guide_{stamp}.png"), guidePng);
             }
             catch
             {
@@ -70,7 +68,7 @@ public sealed class TranslationService
         for (int attempt = 1; attempt <= maxAttempts; attempt++)
         {
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(_settings.Server.RequestTimeoutSec));
-            result = await _apiClient.RequestInferenceAsync(_settings.Server, cleanPng, guidePng, cts.Token).ConfigureAwait(false);
+            result = await _apiClient.RequestInferenceAsync(_settings.Server, cleanPng, cts.Token).ConfigureAwait(false);
             if (string.IsNullOrWhiteSpace(result.Error))
                 break;
             _logger.Log($"Inference attempt {attempt} failed: {result.Error}");

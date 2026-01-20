@@ -35,7 +35,6 @@ public sealed class ApiClient : IDisposable
     public async Task<InferenceResult> RequestInferenceAsync(
         ServerSettings settings,
         byte[] cleanPng,
-        byte[] guidePng,
         CancellationToken ct)
     {
         var url = settings.BaseUrl.TrimEnd('/') + settings.InferencePath;
@@ -43,10 +42,6 @@ public sealed class ApiClient : IDisposable
         var clean = new ByteArrayContent(cleanPng);
         clean.Headers.ContentType = new MediaTypeHeaderValue("image/png");
         content.Add(clean, "clean_image", "clean.png");
-
-        var guide = new ByteArrayContent(guidePng);
-        guide.Headers.ContentType = new MediaTypeHeaderValue("image/png");
-        content.Add(guide, "guide_image", "guide.png");
 
         var optionsJson = JsonSerializer.Serialize(new
         {
