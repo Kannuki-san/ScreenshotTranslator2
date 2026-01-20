@@ -127,7 +127,25 @@ class LlamaClient:
         except (KeyError, IndexError) as exc:  # pragma: no cover
             raise RuntimeError(f"Unexpected response: {data}") from exc
 
-    # ... get_status ...
+
+    async def get_status(self) -> str:
+        try:
+            # Check llama-server health
+            health_url = f"{self.api_base}/health"
+            resp = await self._client.get(health_url)
+            if resp.status_code == 200:
+                s = resp.json().get("status")
+                if s == "ok" or s == "loading model":
+                     return "起動中（API応答あり）"
+                return f"異常 ({s})"
+            if resp.status_code == 503:
+                return "モデル読込中 (HTTP 503)"
+            return f"HTTP {resp.status_code}"
+        except httpx.ConnectError:
+             return "接続不能 (llama-serverダウン？)"
+        except Exception as e:
+             return f"エラー: {e}"
+
 
     @staticmethod
     def _build_grounding_prompt(return_roi_fallback: bool, is_single_image: bool = False) -> str:
