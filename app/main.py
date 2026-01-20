@@ -318,7 +318,7 @@ def _validate_bbox(b: Dict[str, Any], w: int, h: int) -> Tuple[int, int, int, in
 @app.post("/api/v1/ocr_translate_with_grounding")
 async def ocr_translate_with_grounding(
     clean_image: UploadFile = File(...),
-    guide_image: UploadFile = File(...),
+    guide_image: Optional[UploadFile] = File(None),
     options: str = Form(default="{}"),
 ) -> JSONResponse:
     try:
@@ -332,7 +332,10 @@ async def ocr_translate_with_grounding(
     timeout_sec = int(opt.get("timeout_sec", 90))
 
     clean_png, w, h = _read_upload_as_png(clean_image)
-    guide_png, _, _ = _read_upload_as_png(guide_image)
+    if guide_image:
+        guide_png, _, _ = _read_upload_as_png(guide_image)
+    else:
+        guide_png = clean_png
     if w > 1920 or h > 1080:
         raise HTTPException(status_code=400, detail="clean_image exceeds 1920x1080 limit")
 
