@@ -18,7 +18,7 @@ def download_file(url, filename):
 
 def setup_kokoro():
     print("Checking Kokoro ONNX models...")
-    base_url = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/v0.1.0"
+    base_url = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0"
     download_file(f"{base_url}/kokoro-v1.0.onnx", "kokoro-v1.0.onnx")
     download_file(f"{base_url}/voices-v1.0.bin", "voices-v1.0.bin")
 
