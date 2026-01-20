@@ -393,10 +393,8 @@ async def monitor_update(
         # interrupt previous speech
         tts_engine.speak("", interrupt=True) 
 
-    # Check if TTS is currently busy playing audio (User Request: Don't interrupt, use latest after finish)
-    if not reset_session and tts_engine.is_busy():
-        print("[Monitor] TTS is busy. Skipping this update to accumulate changes.")
-        return JSONResponse({"status": "skipped_busy"})
+    # Busy check removed to allow background processing
+    # if not reset_session and tts_engine.is_busy(): ...
 
     # 1. Perform OCR/Translation (using existing logic)
     # Reuse ocr_translate_with_grounding logic or call it directly?
@@ -486,8 +484,19 @@ async def monitor_update(
             if paras:
                 text_to_speak = paras[-1]
         
-        print(f"[Monitor] New content: {text_to_speak[:50]}...")
-        tts_engine.speak(text_to_speak, interrupt=True)
+        
+        print(f"[Monitor] New content len={len(text_to_speak)}: {text_to_speak[:50]}...")
+        
+        # If busy, buffer the text to be spoken NEXT (immediately after current).
+        # This replaces any previously buffered "next" text, ensuring freshness.
+        if tts_engine.is_busy():
+            print("[Monitor] TTS busy. Buffering as NEXT text.")
+            tts_engine.set_next_text(text_to_speak)
+        else:
+            # Not busy, speak immediately.
+            # interrupt=True ensures if there's any tail silence/processing, we take over,
+            # but since is_busy is False, usually it's clean.
+            tts_engine.speak(text_to_speak, interrupt=True)
         
     # Update state
     # Only update if we accepted the new content.

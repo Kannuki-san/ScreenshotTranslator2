@@ -20,3 +20,5 @@ obj/
 *.suo
 *.pdb
 screenshot_translator.egg-info/
+*.onnx
+*.bin
