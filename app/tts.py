@@ -95,29 +95,24 @@ class KokoroTTS:
             self._next_text = text
             logger.info(f"Buffered next text (len={len(text)}): {text[:20]}...")
 
-    def _split_text(self, text, limit=150):
-        """Split text into smaller chunks significantly below the limit to prevent hangs."""
-        if len(text) <= limit:
-            return [text]
-        
-        chunks = []
-        current_chunk = ""
-        # Split by common delimiters
-        parts = re.split(r'([。、\n？！?!])', text)
-        
-        for part in parts:
-            if not part: 
-                continue
-            if len(current_chunk) + len(part) > limit:
-                if current_chunk:
-                    chunks.append(current_chunk)
-                current_chunk = part
-            else:
-                current_chunk += part
-                
-        if current_chunk:
-            chunks.append(current_chunk)
+    def _split_by_language(self, text):
+        """
+        Split text into chunks of English (contiguous ASCII characters) and others (Japanese/Mainly non-ASCII).
+        Returns list of (text_chunk, is_english_bool).
+        """
+        if not text:
+            return []
             
+        # Split by contiguous ASCII characters (Hex 20-7E)
+        # This includes alphanumerics, symbols, and spaces.
+        parts = re.split(r'([\x20-\x7E]+)', text)
+        chunks = []
+        for p in parts:
+            if not p:
+                continue
+            # Check if this part is purely ASCII
+            is_en = bool(re.match(r'^[\x20-\x7E]+$', p))
+            chunks.append((p, is_en))
         return chunks
 
     def _worker_loop(self):
@@ -142,79 +137,84 @@ class KokoroTTS:
                          logger.error("Kokoro engine not loaded. Cannot speak.")
                          continue
 
-                    # Split long text into chunks
-                    chunks = self._split_text(full_text)
-                    if len(chunks) > 1:
-                        logger.info(f"Text too long, split into {len(chunks)} chunks.")
-
-                    for i, text in enumerate(chunks):
-                        # Re-check interruption between chunks
+                    # Split text by language
+                    chunks = self._split_by_language(full_text)
+                    audio_segments = []
+                    
+                    # Generate audio for all chunks first
+                    for i, (text, is_en) in enumerate(chunks):
                         if gen_id != self._current_gen_id:
-                            logger.info(f"TTS interrupted for gen_id={gen_id} during chunk {i}")
+                            logger.info(f"TTS interrupted for gen_id={gen_id}")
+                            audio_segments = None
                             break
-
-                        # G2P Pre-processing
-                        input_text = text
-                        is_phonemes = False
-                        if self.g2p:
-                            try:
-                                phonemes, _ = self.g2p(text)
-                                input_text = phonemes
-                                is_phonemes = True
-                            except Exception as e:
-                                logger.error(f"G2P error: {e}, using raw text")
                         
-                        use_aplay = not HAS_SOUNDDEVICE
-                        aplay_proc = None
-
                         try:
+                            # Selection of language and G2P
+                            speed = 1.0
+                            if is_en:
+                                lang = 'en-us' # Use correct English code
+                                input_text = text
+                                is_phonemes = False
+                                speed = 1.0
+                                # Kokoro internal tokenizer uses espeak-ng (via espeakng_loader)
+                            else:
+                                lang = 'j'
+                                input_text = text
+                                is_phonemes = False
+                                speed = 1.25 # Japanese 25% faster
+                                if self.g2p:
+                                    try:
+                                        phonemes, _ = self.g2p(text)
+                                        input_text = phonemes
+                                        is_phonemes = True
+                                    except Exception as e:
+                                        logger.error(f"G2P error: {e}, using raw text")
+
+                            # Generate audio stream (we collect all samples)
                             stream = self.kokoro.create_stream(
                                 input_text, 
                                 voice='af_heart', 
-                                speed=1.0, 
-                                lang='j',
+                                speed=speed, 
+                                lang=lang,
                                 is_phonemes=is_phonemes
                             )
+                            
+                            chunk_samples = []
+                            async def consume_stream():
+                                async for samples, _ in stream:
+                                    chunk_samples.append(samples)
+                            
+                            import asyncio
+                            asyncio.run(consume_stream())
+                            
+                            if chunk_samples:
+                                audio_segments.extend(chunk_samples)
 
-                            if use_aplay:
+                        except Exception as e:
+                            logger.error(f"Chunk generation error: {e}")
+                    
+                    # Play combined audio if not interrupted
+                    if audio_segments and gen_id == self._current_gen_id:
+                        full_audio = np.concatenate(audio_segments)
+                        
+                        if HAS_SOUNDDEVICE:
+                            sd.play(full_audio, 24000)
+                            sd.wait()
+                        else:
+                            # Fallback to aplay (write all at once)
+                            try:
                                 aplay_proc = subprocess.Popen(
                                     ['aplay', '-f', 'S16_LE', '-r', '24000', '-c', '1', '-q'],
                                     stdin=subprocess.PIPE
                                 )
-
-                            async def play_stream():
-                                 count = 0
-                                 async for samples, sample_rate in stream:
-                                    if gen_id != self._current_gen_id:
-                                        break
-                                    
-                                    if use_aplay and aplay_proc:
-                                        audio_clipped = np.clip(samples, -1.0, 1.0)
-                                        audio_int16 = (audio_clipped * 32767).astype(np.int16)
-                                        try:
-                                            aplay_proc.stdin.write(audio_int16.tobytes())
-                                            aplay_proc.stdin.flush()
-                                        except (BrokenPipeError, OSError):
-                                            break
-                                    elif HAS_SOUNDDEVICE:
-                                        sd.play(samples, sample_rate)
-                                        sd.wait()
-                                    
-                                    count += 1
-
-                            import asyncio
-                            asyncio.run(play_stream())
-
-                            if aplay_proc:
+                                audio_clipped = np.clip(full_audio, -1.0, 1.0)
+                                audio_int16 = (audio_clipped * 32767).astype(np.int16)
+                                aplay_proc.stdin.write(audio_int16.tobytes())
                                 aplay_proc.stdin.close()
                                 aplay_proc.wait()
+                            except Exception as e:
+                                logger.error(f"Aplay error: {e}")
 
-                        except Exception as e:
-                            logger.error(f"Chunk generation error: {e}")
-                            if use_aplay and aplay_proc:
-                                try: aplay_proc.kill() 
-                                except: pass
-                
                 finally:
                     self._queue.task_done()
                     self._is_generating = False

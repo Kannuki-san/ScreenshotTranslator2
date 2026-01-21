@@ -456,16 +456,9 @@ async def monitor_update(
         # User said: "複数パラグラフがある場合は一番下のパラグラフのみTTSできれば一番良い" (for FIRST time mostly?)
         # "初回は...一番下のパラグラフのみ"
         
+        # User said: "複数パラグラフがある場合は一番下のパラグラフのみTTSできれば一番良い" (for FIRST time mostly?)
+        # Logic removed as per user request (2025-01-21) to speak full content always.
         text_to_speak = new_content
-        
-        if not session_state.last_ocr_text and reset_session:
-            # First run (reset_session=True)
-            # Try to grab last paragraph
-            paras = new_content.split('\n')
-            paras = [p.strip() for p in paras if p.strip()]
-            if paras:
-                text_to_speak = paras[-1]
-        
         
         print(f"[Monitor] New content len={len(text_to_speak)}: {text_to_speak[:50]}...")
         
