@@ -74,6 +74,7 @@ class KokoroTTS:
         self.sample_rate = 24000
         self._queue = queue.Queue()
         self._current_gen_id = 0
+        self._current_text = None
         self._stop_event = threading.Event()
         self._is_generating = False
         
@@ -125,6 +126,7 @@ class KokoroTTS:
                 
                 self._is_generating = True
                 full_text, gen_id = item
+                self._current_text = full_text
                 
                 try:
                     # Check cancellation before starting
@@ -218,6 +220,7 @@ class KokoroTTS:
                 finally:
                     self._queue.task_done()
                     self._is_generating = False
+                    self._current_text = None  # Clear current text
 
                     # Check for buffered next text regardless of success/failure
                     next_text_to_speak = None
@@ -234,6 +237,23 @@ class KokoroTTS:
             except Exception as e:
                 logger.error(f"TTS worker error: {e}")
                 self._is_generating = False
+                self._current_text = None
+
+    def is_content_active(self, text: str) -> bool:
+        """Check if text is currently being spoken or is buffered as next."""
+        if not text:
+            return False
+        
+        # Check buffer
+        with self._next_text_lock:
+            if self._next_text == text:
+                return True
+        
+        # Check current (approximate, no lock needed for simple string check)
+        if self._current_text == text:
+            return True
+            
+        return False
 
     def speak(self, text: str, interrupt: bool = True):
         if not text:

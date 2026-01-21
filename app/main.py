@@ -452,33 +452,30 @@ async def monitor_update(
     new_content = DiffEngine.detect_new_content(session_state.last_ocr_text, current_text)
     
     if new_content:
-        # TTS only if there is new content
-        # User said: "複数パラグラフがある場合は一番下のパラグラフのみTTSできれば一番良い" (for FIRST time mostly?)
-        # "初回は...一番下のパラグラフのみ"
-        
-        # User said: "複数パラグラフがある場合は一番下のパラグラフのみTTSできれば一番良い" (for FIRST time mostly?)
-        # Logic removed as per user request (2025-01-21) to speak full content always.
-        text_to_speak = new_content
-        
-        print(f"[Monitor] New content len={len(text_to_speak)}: {text_to_speak[:50]}...")
-        
-        # If busy, buffer the text to be spoken NEXT (immediately after current).
-        # This replaces any previously buffered "next" text, ensuring freshness.
-        if tts_engine.is_busy():
-            print("[Monitor] TTS busy. Buffering as NEXT text.")
-            tts_engine.set_next_text(text_to_speak)
+        # Check if already in pipeline (Active or Queued)
+        if tts_engine.is_content_active(new_content):
+            print(f"[Monitor] Skipping {new_content[:20]}... (Already active)")
+            should_update_state = False
         else:
-            # Not busy, speak immediately.
-            # interrupt=True ensures if there's any tail silence/processing, we take over,
-            # but since is_busy is False, usually it's clean.
-            tts_engine.speak(text_to_speak, interrupt=True)
-        
+             if tts_engine.is_busy():
+                 print(f"[Monitor] Buffering {new_content[:20]}...")
+                 # Buffer the text, but DO NOT update last_ocr_text yet.
+                 # We want monitors to keep comparing against the currently speaking text (A),
+                 # until A finishes and B actually starts.
+                 tts_engine.set_next_text(new_content)
+                 should_update_state = False
+             else:
+                 print(f"[Monitor] Speaking {new_content[:20]}...")
+                 tts_engine.speak(new_content, interrupt=True)
+                 should_update_state = True
+    else:
+        should_update_state = False
+
     # Update state
-    # Only update if we accepted the new content.
-    # If new_content is empty, it means we considered the current text as "Same" or "Subset/Jitter".
-    # In those cases, we should KEEP the old text (which is likely the "Good/Full" version) 
-    # to prevent "Good -> Bad(Subset) -> Good(Diff finds missing)" loop.
-    if new_content or reset_session or not session_state.last_ocr_text:
+    # Only update if we accepted the new content for IMMEDIATE speech, or if reset/first run.
+    # If we buffered it, we keep the old state (A) so DiffEngine calculates diff against A,
+    # preventing "B" from being lost if it's merely buffered.
+    if should_update_state or reset_session or not session_state.last_ocr_text:
          session_state.last_ocr_text = current_text
 
     return JSONResponse({"status": "ok", "new_content_len": len(new_content)})
