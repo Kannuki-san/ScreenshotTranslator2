@@ -34,7 +34,7 @@ if [ "$SKIP_LLAMACPP" != "1" ]; then
   echo "[INFO] starting llama.cpp server on port $LLAMA_PORT"
   set +e
   $LLAMA_BIN \
-    --host 0.0.0.0 \
+    --host 127.0.0.1 \
     --port "$LLAMA_PORT" \
     -m "$LLAMA_MODEL" \
     -c "$LLAMA_CTX" \
@@ -56,4 +56,4 @@ export LLAMA_SERVER_URL=${LLAMA_SERVER_URL:-http://127.0.0.1:${LLAMA_PORT}}
 export LLAMA_CTX
 
 echo "[INFO] starting FastAPI on port $WEB_PORT"
-uv run uvicorn app.main:app --host 0.0.0.0 --port "$WEB_PORT"
+uv run uvicorn app.main:app --host 127.0.0.1 --port "$WEB_PORT"
