@@ -6,6 +6,7 @@ from PIL import Image
 import io
 import json
 import os
+import difflib
 from typing import Any, Dict, Tuple, Optional
 
 from .llama_client import LlamaClient
@@ -73,6 +74,21 @@ def _should_retry_webui_output(text: str) -> bool:
     if _looks_like_english_output(lowered):
         return True
     return _is_repetitive_output(lowered)
+
+
+def _looks_like_duplicate_ocr(old_text: str, new_text: str, new_content: str) -> bool:
+    if not old_text or not new_text or not new_content:
+        return False
+    if len(new_text) < 200:
+        return False
+    long_text = len(new_text) >= 300
+    # If "new" content is most of the OCR result, treat this as a jittered re-OCR.
+    ratio_threshold = 0.9 if long_text else 0.8
+    if len(new_content) < int(len(new_text) * ratio_threshold):
+        return False
+    ratio = difflib.SequenceMatcher(None, old_text, new_text).ratio()
+    sim_threshold = 0.9 if long_text else 0.95
+    return ratio > sim_threshold
 
 
 def _log_webui_output(markdown: str, prompt: str) -> None:
@@ -452,6 +468,12 @@ async def monitor_update(
     new_content = DiffEngine.detect_new_content(session_state.last_ocr_text, current_text)
     
     if new_content:
+        if tts_engine.is_busy() and _looks_like_duplicate_ocr(
+            session_state.last_ocr_text, current_text, new_content
+        ):
+            print("[Monitor] Skipping duplicate long OCR jitter while speaking.")
+            should_update_state = False
+            return JSONResponse({"status": "ok", "new_content_len": 0})
         # Check if already in pipeline (Active or Queued)
         if tts_engine.is_content_active(new_content):
             print(f"[Monitor] Skipping {new_content[:20]}... (Already active)")
@@ -479,3 +501,57 @@ async def monitor_update(
          session_state.last_ocr_text = current_text
 
     return JSONResponse({"status": "ok", "new_content_len": len(new_content)})
+
+
+@app.post("/api/v1/ocr_translate_tts_once")
+async def ocr_translate_tts_once(
+    clean_image: UploadFile = File(...),
+    guide_image: Optional[UploadFile] = File(None),
+    options: str = Form(default="{}"),
+) -> JSONResponse:
+    try:
+        opt = json.loads(options) if options else {}
+    except Exception:
+        opt = {}
+
+    timeout_sec = int(opt.get("timeout_sec", 60))
+    clean_png, w, h = _read_upload_as_png(clean_image)
+    if guide_image:
+        guide_png, _, _ = _read_upload_as_png(guide_image)
+    else:
+        guide_png = clean_png
+
+    client = LlamaClient()
+    try:
+        raw = await client.ocr_translate_with_grounding(
+            guide_png=guide_png,
+            clean_png=clean_png,
+            return_roi_fallback=True,
+            timeout_sec=timeout_sec,
+        )
+    except Exception as exc:
+        return JSONResponse({"status": "error", "message": str(exc)}, status_code=500)
+    finally:
+        await client.aclose()
+
+    try:
+        obj = _extract_first_json(raw)
+        current_text = obj.get("ja_translation", "")
+        if not current_text:
+            current_text = obj.get("ocr_text", "")
+    except Exception:
+        current_text = _extract_field_from_raw(raw, "ja_translation") or ""
+        if not current_text:
+            current_text = _extract_field_from_raw(raw, "ocr_text") or ""
+
+    if not current_text:
+        return JSONResponse({"status": "no_text_detected"})
+
+    tts_engine.speak(current_text, interrupt=True)
+    return JSONResponse(
+        {
+            "status": "ok",
+            "text": current_text,
+            "len": len(current_text),
+        }
+    )

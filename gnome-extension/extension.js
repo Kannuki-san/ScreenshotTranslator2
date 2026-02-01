@@ -91,7 +91,7 @@ export default class ScreenshotTranslatorExtension extends Extension {
         this._settings = this.getSettings();
 
         // --- State ---
-        this._mode = 'overlay'; // 'overlay' or 'monitor'
+        this._mode = 'overlay'; // 'overlay' or 'monitor' or 'tts-once'
         this._isMonitoring = false;
         this._monitorTimeoutId = null;
         this._httpSession = new Soup.Session();
@@ -104,6 +104,8 @@ export default class ScreenshotTranslatorExtension extends Extension {
         this._selectionArea.connect('area-selected', (obj, x, y, w, h) => {
             if (this._mode === 'monitor') {
                 this._startMonitoring(x, y, w, h);
+            } else if (this._mode === 'tts-once') {
+                this._takeTtsOnceScreenshot(x, y, w, h);
             } else {
                 this._takeScreenshot(x, y, w, h);
             }
@@ -161,6 +163,11 @@ export default class ScreenshotTranslatorExtension extends Extension {
         this._overlayItem.connect('activate', () => { this._setMode('overlay'); });
         this._indicator.menu.addMenuItem(this._overlayItem);
 
+        // Menu: One-shot TTS Mode
+        this._ttsOnceItem = new PopupMenu.PopupMenuItem("TTS Once Mode");
+        this._ttsOnceItem.connect('activate', () => { this._setMode('tts-once'); });
+        this._indicator.menu.addMenuItem(this._ttsOnceItem);
+
         // Menu: Monitor Mode
         this._monitorItem = new PopupMenu.PopupMenuItem("TTS Monitor Mode");
         this._monitorItem.connect('activate', () => { this._setMode('monitor'); });
@@ -184,6 +191,7 @@ export default class ScreenshotTranslatorExtension extends Extension {
     _setMode(mode) {
         this._mode = mode;
         this._overlayItem.setOrnament(mode === 'overlay' ? PopupMenu.Ornament.DOT : PopupMenu.Ornament.NONE);
+        this._ttsOnceItem.setOrnament(mode === 'tts-once' ? PopupMenu.Ornament.DOT : PopupMenu.Ornament.NONE);
         this._monitorItem.setOrnament(mode === 'monitor' ? PopupMenu.Ornament.DOT : PopupMenu.Ornament.NONE);
 
         // If switching mode, better stop any active monitoring to avoid confusion
@@ -365,6 +373,74 @@ export default class ScreenshotTranslatorExtension extends Extension {
 
         } catch (e) {
             Main.notify('Processing Error', e.message);
+        }
+    }
+
+    // --- TTS Once Mode ---
+
+    async _takeTtsOnceScreenshot(x, y, w, h) {
+        const cleanPath = GLib.build_filenamev([GLib.get_tmp_dir(), 'clean_tts_once.png']);
+        try {
+            const file = Gio.File.new_for_path(cleanPath);
+            const stream = file.replace(null, false, Gio.FileCreateFlags.NONE, null);
+            const screenshot = new Shell.Screenshot();
+
+            screenshot.screenshot_area(x, y, w, h, stream, (screenshot, success) => {
+                stream.close(null);
+                if (success) {
+                    this._processAndSendTtsOnce(cleanPath, x, y, w, h);
+                } else {
+                    Main.notify('Screenshot failed');
+                }
+            });
+        } catch (e) {
+            Main.notify('Screenshot error', e.message);
+        }
+    }
+
+    async _processAndSendTtsOnce(cleanPath, x, y, w, h) {
+        try {
+            const [success, cleanBytes] = GLib.file_get_contents(cleanPath);
+            if (!success) {
+                Main.notify('Error', 'Failed to read screenshot file');
+                return;
+            }
+            this._uploadTtsOnce(cleanBytes, cleanBytes, x, y, w, h);
+        } catch (e) {
+            Main.notify('Processing Error', e.message);
+        }
+    }
+
+    async _uploadTtsOnce(cleanBytes, guideBytes, x, y, w, h) {
+        const url = 'http://127.0.0.1:8012/api/v1/ocr_translate_tts_once';
+        try {
+            const boundary = "------------------------" + Date.now().toString(16);
+            const encoder = new TextEncoder();
+            const parts = [];
+
+            const addPart = (name, filename, contentType, data) => {
+                parts.push(encoder.encode(`--${boundary}\r\nContent-Disposition: form-data; name="${name}"` + (filename ? `; filename="${filename}"` : '') + `\r\n` + (contentType ? `Content-Type: ${contentType}\r\n` : '') + `\r\n`));
+                parts.push(data instanceof Uint8Array ? data : encoder.encode(data));
+                parts.push(encoder.encode("\r\n"));
+            };
+
+            addPart('clean_image', 'clean.png', 'image/png', cleanBytes);
+            addPart('guide_image', 'guide.png', 'image/png', guideBytes);
+            addPart('options', null, null, JSON.stringify({ return_roi_fallback: true }));
+
+            parts.push(encoder.encode(`--${boundary}--\r\n`));
+
+            const glibBytes = new GLib.Bytes(this._concatBuffers(parts));
+            const msg = Soup.Message.new('POST', url);
+            msg.set_request_body_from_bytes(`multipart/form-data; boundary=${boundary}`, glibBytes);
+
+            const bytes = await this._httpSession.send_and_read_async(msg, GLib.PRIORITY_DEFAULT, null);
+            const status = msg.get_status();
+            if (status !== 200) {
+                throw new Error(`Server returned ${status} ${msg.get_reason_phrase()}`);
+            }
+        } catch (e) {
+            Main.notify('TTS Error', e.message);
         }
     }
 

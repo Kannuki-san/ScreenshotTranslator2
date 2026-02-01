@@ -7,7 +7,7 @@
 このリポジトリには3つの使い方があります。
 1) Web UI: クリップボード貼り付け画像を OCR + 英→日翻訳して Markdown 表示
 2) Windows 常駐クライアント: 画面上の範囲選択 → スクショ → OCR + 翻訳をオーバーレイ表示
-3) Ubuntu Gnome Extension: 画面上の範囲選択 → スクショ → OCR + 翻訳 (Monitor Modeで自動読み上げ対応)
+3) Ubuntu Gnome Extension: 画面上の範囲選択 → スクショ → OCR + 翻訳（TTS Once / Monitor で読み上げ対応）
 
 ※ Windows 常駐クライアントは **Windows + WSL2 前提**です（Windows側から WSL2 上の FastAPI に接続します）。
 
@@ -128,6 +128,7 @@ cp -r gnome-extension/* ~/.local/share/gnome-shell/extensions/screenshot-transla
 1. **モード選択**:
    トップバーのアイコンをクリックし、以下のいずれかを選択します。
    - **Text Overlay Mode (翻訳モード)** [デフォルト]: 選択範囲を翻訳して画面に表示します。
+   - **TTS Once Mode (読み上げ・1回)**: 選択範囲を一度だけOCR→翻訳→読み上げします（監視しません）。
    - **TTS Monitor Mode (読み上げモード)**: 選択範囲を定期的に監視し、変化があった箇所を日本語で読み上げます。
 
 2. **キャプチャ開始**:
@@ -141,6 +142,7 @@ cp -r gnome-extension/* ~/.local/share/gnome-shell/extensions/screenshot-transla
      - **Mixed TTS**: 英語はネイティブ発音、日本語は日本語として自然に（かつ少し早口 1.25x で）読み上げます。
      - **Stability**: 翻訳の揺らぎを抑制し、無駄な再読み上げを減らしました。
      - **Full Read**: 初回起動時は、検出されたテキスト全文を読み上げます。
+     - **Chunked Read**: 長文は文単位で順次読み上げ、最初の音が早く出るようにしています。
    - 停止するには、再度ショートカットを押して新しい範囲を選ぶか、メニューから「Stop Monitoring」を選択してください。
 
 4. **Monitor Mode のリセット**:
@@ -162,6 +164,7 @@ rm -rf ~/.local/share/gnome-shell/extensions/screenshot-translator@<your-usernam
 ## 新API（WSL側）
 - `GET /health`
 - `POST /api/v1/ocr_translate_with_grounding`（`clean_image` (必須) と `guide_image` (任意) を multipart で送信）
+- `POST /api/v1/ocr_translate_tts_once`（OCR→翻訳→読み上げを1回実行）
 
 ## 開発メモ
 - 依存は仮想環境内 (`uv sync`) のみでインストールされ、ホストには入れません。
@@ -172,5 +175,3 @@ rm -rf ~/.local/share/gnome-shell/extensions/screenshot-translator@<your-usernam
 - llama.cpp 初回起動時にモデルをロードするため、1 回目のリクエストは時間がかかります。モデルのロードが完了（ステータスに「準備完了 (ログより) / 起動中（API応答あり・モデル読み込み未確認）」と表示されます。）しても翻訳が実行されない場合は、お手数ですが、再度画像を張り付けてください。
 - モデル読み込み中に画像を貼り付けると失敗する場合があります。ステータスが「準備完了」と表示されてから貼り付けてください。
 - `LLAMA_CTX` を大きくすると VRAM 使用量が増えます。GPU メモリに合わせて起動時に調整してください。
-
-
