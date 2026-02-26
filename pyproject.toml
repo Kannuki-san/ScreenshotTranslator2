@@ -1,7 +1,7 @@
 [project]
 name = "screenshot-translator"
-version = "4.2.0"
-description = "Clipboard screenshot OCR + JP translation using llama.cpp Qwen3-VL"
+version = "5.0.0"
+description = "Clipboard screenshot OCR + JP translation using llama.cpp Qwen3.5"
 authors = [{ name = "" }]
 readme = "README.md"
 requires-python = ">=3.10"

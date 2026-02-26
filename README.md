@@ -1,4 +1,4 @@
-# Screenshot Translator (Qwen3-VL-30B-A3B)
+# Screenshot Translator (Qwen3.5-35B-A3B)
 
 <img width="640" height="521" alt="Image" src="https://github.com/user-attachments/assets/f24ef322-08b5-48e6-aa54-71b9e06d7401" />
 
@@ -16,9 +16,10 @@
 ## 要件
 - CUDA 対応 GPU (例: CUDA 13 / nvcc 13.0.88)
 - `uv` (Python パッケージマネージャ) がホストにインストール済み
-- 下の２つのモデルファイルを[リンク先からダウンロード](https://huggingface.co/unsloth/Qwen3-VL-30B-A3B-Instruct-GGUF/tree/main)して、ローカル（./models/フォルダを作ってその中）に配置
-  - [`models/Qwen3-VL-30B-A3B-Instruct-UD-Q4_K_XL.gguf`](https://huggingface.co/unsloth/Qwen3-VL-30B-A3B-Instruct-GGUF/blob/main/Qwen3-VL-30B-A3B-Instruct-UD-Q4_K_XL.gguf)
-  - [`models/mmproj-F32.gguf`](https://huggingface.co/unsloth/Qwen3-VL-30B-A3B-Instruct-GGUF/blob/main/mmproj-F32.gguf)
+- 下の2つのモデルファイルをローカル `models/` に配置
+  - `models/Qwen3.5-35B-A3B-UD-Q4_K_XL.gguf`（優先）
+  - `models/mmproj-F32.gguf`
+- 配布元: [unsloth/Qwen3.5-35B-A3B-GGUF](https://huggingface.co/unsloth/Qwen3.5-35B-A3B-GGUF/tree/main)
 - **音声読み上げ (TTS)**:
   - バックエンド起動時に `Kokoro-82M` (約300MB) が自動でダウンロードされます。
   - 音声再生のために、ホスト側に `libportaudio2` や `aplay` (ALSA) が必要です（Ubuntu Desktopなら通常は入っています）。
@@ -39,15 +40,25 @@
    - デフォルト: llama-server 8009, Web UI 8012, ctx=8192。
    - VRAMが少ない場合は起動時に `LLAMA_CTX` を下げて起動できます（例: `LLAMA_CTX=4096 ./start.sh`）。
    - 既存の llama-server を使う場合: `SKIP_LLAMACPP=1 LLAMA_SERVER_URL=http://127.0.0.1:8009 ./start.sh`
+   - Qwen3.5 既定時は `app/chat_templates/qwen3.5-35b-a3b.chat_template.jinja` と `LLAMA_THINK_BUDGET=0` が自動適用されます。
 
 ## 主な環境変数
 - `WEB_PORT` (既定: 8012)
 - `LLAMA_PORT` (既定: 8009)
-- `LLAMA_MODEL` (既定: models/Qwen3-VL-30B-A3B-Instruct-UD-Q4_K_XL.gguf)
-- `LLAMA_MMPROJ` (既定: models/mmproj-F32.gguf)
+- `LLAMA_MODEL` (既定: `models/Qwen3.5-35B-A3B-UD-Q4_K_XL.gguf`)
+- `LLAMA_MMPROJ` (既定: `models/mmproj-F32.gguf`)
 - `LLAMA_CTX` (既定: 8192)
 - `LLAMA_BIN` (既定: ./llama.cpp/build/bin/llama-server)
+- `LLAMA_CHAT_TEMPLATE_FILE` (`--chat-template-file` に渡すテンプレートパス)
+- `LLAMA_THINK_BUDGET` (`--reasoning-budget` に渡す値。Qwen3.5既定時は自動で `0`)
+- `LLAMA_ARG_CHAT_TEMPLATE_FILE` / `LLAMA_ARG_THINK_BUDGET` も互換入力として受け付け
 - `SKIP_LLAMACPP`=1 で llama-server 起動をスキップ
+
+### Qwen3.5 テンプレート運用
+- 追跡対象テンプレートは `app/chat_templates/qwen3.5-35b-a3b.chat_template.jinja` です。
+- 元テンプレートは Qwen 公式 `chat_template.jinja`（Apache-2.0）で、このリポジトリでは `enable_thinking=false` を加えています。
+- `models/` は `.gitignore` 対象のため、テンプレートは `models/` ではなく `app/chat_templates/` に置いて管理します。
+- 実行時に `LAMA_ARG_THINK_BUDGET`（typo）が与えられた場合も互換で受け付けますが、`LLAMA_THINK_BUDGET` の利用を推奨します。
 
 ### `LLAMA_CTX` について（VRAM調整）
 - `LLAMA_CTX` は **llama.cpp の `llama-server` を起動する際の `-c`** に渡され、主に KV cache のサイズに効くため VRAM 使用量に影響します。
