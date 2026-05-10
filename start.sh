@@ -75,7 +75,7 @@ uv run app/scripts/setup_tts.py
 if [ "$SKIP_LLAMACPP" != "1" ]; then
   if [ ! -x "$LLAMA_BIN" ]; then
     echo "[ERROR] llama-server binary not found at $LLAMA_BIN"
-    echo "Run scripts/build_llama.sh to clone & build llama.cpp with CUDA."
+    echo "Run scripts/build_llama.sh to clone & build llama.cpp with ROCm (GGML_HIP)."
     exit 1
   fi
   if [ ! -f "$LLAMA_MODEL" ]; then

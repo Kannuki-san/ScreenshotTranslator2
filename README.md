@@ -14,7 +14,7 @@
 ※ Ubuntu Gnome Extension は Ubuntu (Gnome Shell) 環境用です。
 
 ## 要件
-- CUDA 対応 GPU (例: CUDA 13 / nvcc 13.0.88)
+- ROCm 対応 AMD GPU (例: ROCm 6.x / hipcc)
 - `uv` (Python パッケージマネージャ) がホストにインストール済み
 - 下の2つのモデルファイルをローカル `models/` に配置
   - `models/gemma-4-26B-A4B-it-UD-Q4_K_XL.gguf`（既定）
@@ -25,11 +25,11 @@
   - 音声再生のために、ホスト側に `libportaudio2` や `aplay` (ALSA) が必要です（Ubuntu Desktopなら通常は入っています）。
 
 ## 使い方
-1. llama.cpp を CUDA ビルド
+1. llama.cpp を ROCm ビルド
    ```bash
    ./app/scripts/build_llama.sh
    ```
-   - `GGML_CUDA=ON` のみでビルドし、`LLAMA_CURL=OFF` でlibcurl未インストール環境でも通るようにしています。
+   - `GGML_HIP=ON` でビルドし、`LLAMA_CURL=OFF` でlibcurl未インストール環境でも通るようにしています。
    - 並列ビルドは `JOBS` 環境変数で上書き可能（既定は `nproc` があればその値、なければ4）。
    - 必要に応じて `LLAMA_REPO` / `LLAMA_DIR` を上書きしてください。
 2. モデルを `models/` 配下へ配置 (パスは環境変数で変更可)。
@@ -120,7 +120,7 @@
 - オーバーレイは「×」で閉じられます（アプリ自体の終了はトレイメニューの Quit）。
 
 ## Ubuntu Gnome Extension (Screenshot Translator)
-Ubuntu (Gnome Shell) 環境向けの専用拡張機能です。Windows 版とは操作感が異なります。
+Ubuntu (Gnome Shell) 環境向けの専用拡張機能です（GNOME Shell 46 / 50 / 50.1 対応）。Windows 版とは操作感が異なります。
 バージョン19以降、**トップバーのメニューからモード切替**が可能になりました。
 
 ### 前提

@@ -13,13 +13,13 @@ cd "$LLAMA_DIR"
 mkdir -p build
 cd build
 
-# Build with CUDA (NVCC must be available)
-# llama.cpp deprecated LLAMA_CUBLAS / LLAMA_CUDA; use GGML_CUDA only
+# Build with ROCm (HIP must be available)
+# llama.cpp deprecated LLAMA_HIPBLAS; use GGML_HIP only
 # Disable CURL to avoid missing libcurl dev warning if not installed
-cmake -DGGML_CUDA=ON -DLLAMA_CURL=OFF ..
+cmake -DGGML_HIP=ON -DLLAMA_CURL=OFF ..
 
 # parallel build; fall back to 4 if nproc is unavailable
 JOBS=${JOBS:-$(command -v nproc >/dev/null 2>&1 && nproc || echo 4)}
 cmake --build . -j "${JOBS}"
 
-echo "[INFO] llama.cpp built. Binary: $(pwd)/bin/llama-server"
+echo "[INFO] llama.cpp built with ROCm support. Binary: $(pwd)/bin/llama-server"
