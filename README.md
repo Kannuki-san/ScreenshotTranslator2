@@ -1,4 +1,4 @@
-# Screenshot Translator (Gemma-4-26B-A4B-It)
+# Screenshot Translator ROCm(Gemma-4-26B-A4B-It)
 
 <img width="640" height="521" alt="Image" src="https://github.com/user-attachments/assets/f24ef322-08b5-48e6-aa54-71b9e06d7401" />
 
